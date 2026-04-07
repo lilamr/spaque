@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment & secrets
+.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs & temp
+*.log
+*.tmp
+spaque_map_*.html
+spatial_*.html
+
+# Test cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Distribution
+*.zip
+*.tar.gz
