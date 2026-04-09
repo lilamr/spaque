@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"   # contoh: v1.1.0, v1.2.0
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Release
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgdal-dev gdal-bin libgeos-dev libproj-dev \
+            libgl1-mesa-glx libegl1 xvfb \
+            libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-xinerama0 libxcb-xfixes0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            geopandas psycopg2-binary shapely matplotlib \
+            sqlalchemy GeoAlchemy2 python-dotenv pyproj \
+            fiona pandas numpy Pillow folium \
+            PyQt6>=6.6.0 \
+            pytest
+
+      - name: Run tests before release
+        env:
+          QT_QPA_PLATFORM: offscreen
+          DISPLAY: ":99"
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 1
+          python -m pytest tests/unit/ -v --tb=short
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build release zip
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          ZIP_NAME="spaque-v${VERSION}.zip"
+
+          zip -r "${ZIP_NAME}" . \
+            --exclude "*.pyc" \
+            --exclude "*/__pycache__/*" \
+            --exclude "*/.pytest_cache/*" \
+            --exclude "*/.git/*" \
+            --exclude "*/.venv/*" \
+            --exclude "*.env" \
+            --exclude ".DS_Store" \
+            --exclude "coverage.xml" \
+            --exclude "*.egg-info/*"
+
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "Built: $(du -sh ${ZIP_NAME})"
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          # Ambil section changelog untuk versi ini
+          NOTES=$(awk "/^## v${VERSION}/,/^## v[0-9]/" CHANGELOG.md \
+                  | grep -v "^## v[0-9]" | head -50 | sed 's/^//')
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v${VERSION}"
+          fi
+          # Simpan ke file untuk menghindari masalah multiline di env
+          echo "$NOTES" > release_notes.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Spaque v${{ steps.version.outputs.VERSION }}"
+          body_path: release_notes.txt
+          files: ${{ env.ZIP_NAME }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
