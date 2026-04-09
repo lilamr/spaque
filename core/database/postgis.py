@@ -122,6 +122,7 @@ class PostGISDatabase:
 
     def fetch_raw(self, sql: str) -> Tuple[List[str], List[tuple]]:
         """Execute SQL and return (column_names, rows)."""
+        self._conn.ensure_connection()
         cur = self._conn.cursor()
         try:
             cur.execute(sql)
@@ -133,6 +134,22 @@ class PostGISDatabase:
 
     # ── Write operations ──────────────────────────────────────────────────────
 
+    def _make_write_connection(self):
+        """
+        Buat koneksi psycopg2 baru khusus untuk operasi tulis (DDL).
+        Ini memastikan thread-safety: tidak berbagi koneksi dengan main thread.
+        """
+        import psycopg2 as _psycopg2
+        p = self._conn.params   # property, bukan attribute private
+        if not p:
+            raise RuntimeError("Not connected to database")
+        conn = _psycopg2.connect(
+            host=p.host, port=p.port, dbname=p.dbname,
+            user=p.user, password=p.password, connect_timeout=30,
+        )
+        conn.autocommit = False
+        return conn
+
     def create_table_from_sql(self, sql: str,
                               schema: str, table: str) -> Tuple[bool, str, int]:
         """
@@ -141,16 +158,24 @@ class PostGISDatabase:
         kolom geometri asli di-DROP dan kolom hasil di-RENAME ke 'geom'
         agar tabel hanya punya satu kolom geometri aktif.
         Returns (success, message, row_count).
+
+        Thread-safe: membuat koneksi psycopg2 sendiri per panggilan,
+        tidak memakai shared connection dari main thread.
         """
         target = f'"{schema}"."{table}"'
-        cur = self._conn.cursor()
+        try:
+            write_conn = self._make_write_connection()
+        except Exception as exc:
+            logger.error("create_table_from_sql: gagal buat koneksi write: %s", exc)
+            return False, f"Gagal koneksi ke database: {exc}", 0
+
+        cur = write_conn.cursor()
         try:
             cur.execute(f"DROP TABLE IF EXISTS {target}")
             cur.execute(f"CREATE TABLE {target} AS ({sql})")
 
             # ── Normalisasi kolom geometri ──────────────────────────────────
-            # Cek semua kolom bertipe geometry
-            cur.execute(f"""
+            cur.execute("""
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_schema = %s AND table_name = %s
@@ -160,36 +185,33 @@ class PostGISDatabase:
             geom_cols = [r[0] for r in cur.fetchall()]
 
             if len(geom_cols) > 1:
-                # Ada kolom geometri ganda
-                # Prioritas: cari kolom hasil operasi (bukan 'geom' asli)
-                result_geom = next(
-                    (c for c in geom_cols if c != 'geom'), geom_cols[-1])
-                original_geom = next(
-                    (c for c in geom_cols if c != result_geom), geom_cols[0])
-
-                # Hapus kolom geom asli, rename kolom hasil ke 'geom'
-                cur.execute(
-                    f'ALTER TABLE {target} DROP COLUMN IF EXISTS "{original_geom}"')
+                result_geom   = next((c for c in geom_cols if c != 'geom'), geom_cols[-1])
+                original_geom = next((c for c in geom_cols if c != result_geom), geom_cols[0])
+                cur.execute(f'ALTER TABLE {target} DROP COLUMN IF EXISTS "{original_geom}"')
                 if result_geom != 'geom':
-                    cur.execute(
-                        f'ALTER TABLE {target} RENAME COLUMN "{result_geom}" TO "geom"')
-                logger.debug(
-                    "Geom columns normalized: dropped '%s', renamed '%s' → 'geom'",
-                    original_geom, result_geom)
+                    cur.execute(f'ALTER TABLE {target} RENAME COLUMN "{result_geom}" TO "geom"')
+                logger.debug("Geom columns normalized: dropped '%s', renamed '%s' → 'geom'",
+                             original_geom, result_geom)
 
-            # Tambahkan primary key untuk performa
             cur.execute(
                 f'ALTER TABLE {target} ADD COLUMN IF NOT EXISTS _gid SERIAL PRIMARY KEY')
 
             cur.execute(f"SELECT COUNT(*) FROM {target}")
             count = cur.fetchone()[0]
-            self._conn.commit()
+            write_conn.commit()
             msg = f"Tabel '{table}' berhasil dibuat dengan {count:,} fitur"
             logger.info(msg)
             return True, msg, count
         except Exception as exc:
-            self._conn.rollback()
+            try:
+                write_conn.rollback()
+            except Exception:
+                pass
             logger.error("create_table_from_sql failed: %s", exc)
             return False, str(exc), 0
         finally:
             cur.close()
+            try:
+                write_conn.close()
+            except Exception:
+                pass

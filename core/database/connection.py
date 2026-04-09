@@ -93,13 +93,43 @@ class DatabaseConnection:
         except Exception:
             return False
 
+    def ensure_connection(self) -> bool:
+        """
+        Pastikan koneksi psycopg2 aktif dan dalam state bersih.
+        Jika koneksi mati atau dalam state ABORTED, coba reconnect otomatis
+        menggunakan params terakhir yang disimpan.
+        Returns True jika berhasil, False jika gagal.
+        """
+        # Coba rollback dulu untuk clear ABORTED state
+        if self._conn is not None:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+
+        if self.is_connected:
+            return True
+
+        # Koneksi mati — coba reconnect
+        if self._params is None:
+            logger.warning("ensure_connection: tidak ada params tersimpan untuk reconnect")
+            return False
+
+        logger.info("Auto-reconnect ke %s…", self._params.safe_label)
+        ok, msg = self.connect(self._params)
+        if ok:
+            logger.info("Auto-reconnect berhasil: %s", msg)
+        else:
+            logger.error("Auto-reconnect gagal: %s", msg)
+        return ok
+
     @property
     def params(self) -> Optional[ConnectionParams]:
         return self._params
 
     def cursor(self, dict_cursor: bool = False):
-        """Return a cursor. Raises if not connected."""
-        if not self.is_connected:
+        """Return a cursor. Auto-reconnect jika koneksi mati."""
+        if not self.ensure_connection():
             raise RuntimeError("Not connected to database")
         factory = psycopg2.extras.RealDictCursor if dict_cursor else None
         return self._conn.cursor(cursor_factory=factory)

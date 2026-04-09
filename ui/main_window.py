@@ -39,6 +39,7 @@ from dialogs.connection_dialog import ConnectionDialog
 from dialogs.geoprocess_dialog import GeoprocessDialog
 from dialogs.query_builder_dialog import QueryBuilderDialog
 from dialogs.import_dialog import ImportDialog
+from dialogs.pipeline_dialog import PipelineDialog
 from dialogs.project_dialog import (
     ProjectPropertiesDialog, RecentProjectsDialog, ask_save_changes
 )
@@ -232,6 +233,8 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&Query")
         self._act(m, "🔍  Query Builder…", self._open_query_builder, "Ctrl+Q")
         self._act(m, "⌨  SQL Console", self._open_sql_console, "Ctrl+Shift+Q")
+        m.addSeparator()
+        self._act(m, "🔀  Visual Pipeline Builder…", self._open_pipeline, "Ctrl+P")
 
         # Geoprocessing
         m = mb.addMenu("&Geoprocessing")
@@ -260,6 +263,7 @@ class MainWindow(QMainWindow):
         self._act(m, "📖  Panduan Lengkap…",       lambda: open_help(self),                     "F1")
         self._act(m, "🔍  Panduan Query Builder…",  lambda: open_help(self, "🔍  Query Builder"), "")
         self._act(m, "⚙  Panduan Geoprocessing…",  lambda: open_help(self, "⚙  Geoprocessing"), "")
+        self._act(m, "🔀  Panduan Pipeline Builder…",lambda: open_help(self, "🔀  Pipeline Builder"), "")
         self._act(m, "⌨  Panduan SQL Console…",    lambda: open_help(self, "⌨  SQL Console"),   "")
         m.addSeparator()
         self._act(m, "ℹ  Tentang Spaque",           self._about)
@@ -278,9 +282,10 @@ class MainWindow(QMainWindow):
         tb = self._toolbar
         tb.connect_clicked.connect(self._open_connection)
         tb.refresh_clicked.connect(self._refresh_layers)
-        tb.import_clicked.connect(self._open_import)          # ← NEW
+        tb.import_clicked.connect(self._open_import)
         tb.query_builder_clicked.connect(self._open_query_builder)
         tb.geoprocess_clicked.connect(self._open_geoprocess)
+        tb.pipeline_clicked.connect(self._open_pipeline)
         tb.sql_console_clicked.connect(self._open_sql_console)
         tb.export_clicked.connect(lambda: self._export("GeoJSON"))
         tb.buffer_clicked.connect(lambda: self._open_geoprocess(initial_op="Buffer"))
@@ -607,6 +612,51 @@ class MainWindow(QMainWindow):
 
     def _open_sql_console(self):
         self._bottom_panel.show_sql_console()
+
+    def _open_pipeline(self):
+        """Open Visual Pipeline Builder dialog."""
+        if not self._check_connected():
+            return
+        layers = self._layer_svc.get_layers()
+        if not layers:
+            QMessageBox.warning(self, "Peringatan",
+                                "Tidak ada layer spasial di database.")
+            return
+        dlg = PipelineDialog(
+            layers=layers,
+            get_columns=self._layer_svc.get_columns,
+            repo=self._repo,
+            parent=self,
+        )
+        dlg.pipeline_executed.connect(self._on_pipeline_done)
+        dlg.exec()
+
+    def _on_pipeline_done(self, result):
+        """Called after pipeline execution completes."""
+        self._refresh_layers()
+
+        # Cari tabel aktual dari step Output node (bisa berbeda dari result.output_table
+        # jika rename gagal dan nama geoprocess dipakai)
+        actual_table  = result.output_table
+        actual_schema = result.output_schema
+
+        # Cek apakah ada step Output yang punya sql_subquery (berisi nama tabel aktual)
+        for step in reversed(result.steps):
+            if step.sql_subquery and step.sql_subquery.startswith('SELECT * FROM "'):
+                # Parse: SELECT * FROM "schema"."table"
+                import re
+                m = re.search(r'FROM "([^"]+)"\."([^"]+)"', step.sql_subquery)
+                if m:
+                    actual_schema = m.group(1)
+                    actual_table  = m.group(2)
+                    break
+
+        self.statusBar().showMessage(
+            f"✅ Pipeline selesai → {actual_schema}.{actual_table}"
+        )
+        if actual_table:
+            sql = f'SELECT * FROM "{actual_schema}"."{actual_table}" LIMIT 5000'
+            self._run_query(sql, title=actual_table)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Geoprocessing

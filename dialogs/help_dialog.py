@@ -373,90 +373,14 @@ Hasil geoprocessing sudah tersimpan sebagai tabel baru di PostGIS. Untuk export:
 """,
     },
     {
+        "title": "🔀  Pipeline Builder",
+        "file":  "panduan-pipeline-builder.md",
+        "content": None,
+    },
+    {
         "title": "⌨  SQL Console",
-        "file":  None,
-        "content": """# SQL Console
-
-SQL Console memungkinkan query SQL bebas langsung ke PostGIS, termasuk query multi-layer dan fungsi spasial kompleks.
-
----
-
-## Akses SQL Console
-
-- Menu **Query → SQL Console**
-- Tombol **⌨ SQL Console** di toolbar
-- Shortcut: `Ctrl+Shift+Q`
-- Tab **SQL Console** di panel bawah
-
----
-
-## Contoh Query
-
-### Query Sederhana
-```sql
-SELECT * FROM public.kawasan_hutan
-WHERE luas > 1000
-ORDER BY luas DESC
-LIMIT 50
-```
-
-### Query dengan Fungsi Spasial
-```sql
--- Hitung luas dalam hektar
-SELECT n_kh, luas,
-  ST_Area(geom::geography) / 10000 AS luas_ha
-FROM public.kawasan_hutan
-ORDER BY luas_ha DESC
-```
-
-### Query Multi-Layer (Join Spasial)
-```sql
--- Pohon yang berada di dalam kawasan hutan
-SELECT a.nama_ilmia, a.dbh, b.n_kh
-FROM public.pohon a
-JOIN public.kawasan_hutan b
-  ON ST_Within(a.geom, b.geom)
-WHERE b.n_kh = 'Hutan Lindung'
-```
-
-### Buffer dan Intersect dalam Satu Query
-```sql
--- Pohon dalam radius 500m dari sungai
-SELECT p.*
-FROM public.pohon p
-WHERE EXISTS (
-  SELECT 1 FROM public.sungai s
-  WHERE ST_DWithin(p.geom::geography, s.geom::geography, 500)
-)
-```
-
----
-
-## Tips SQL Console
-
-- Query yang menghasilkan kolom geometri akan ditampilkan di **peta**
-- Query tanpa geometri hanya ditampilkan di **tabel atribut**
-- Gunakan `LIMIT` untuk query besar agar tidak lambat
-- Komentar SQL menggunakan `--` di awal baris
-- Semua query menggunakan **read-only** — tidak bisa INSERT/UPDATE/DELETE dari console
-
----
-
-## Referensi Fungsi PostGIS
-
-| Fungsi | Keterangan |
-|---|---|
-| `ST_Area(geom::geography)` | Luas dalam m² |
-| `ST_Length(geom::geography)` | Panjang dalam meter |
-| `ST_Distance(a::geography, b::geography)` | Jarak dalam meter |
-| `ST_Buffer(geom::geography, r)::geometry` | Buffer r meter |
-| `ST_Intersects(a, b)` | Cek tumpang tindih |
-| `ST_Within(a, b)` | Cek a di dalam b |
-| `ST_Union(geom)` | Gabung geometri |
-| `ST_Intersection(a, b)` | Irisan dua geometri |
-| `ST_Transform(geom, srid)` | Ubah CRS |
-| `ST_SRID(geom)` | Cek CRS saat ini |
-""",
+        "file":  "panduan-sql-console.md",
+        "content": None,
     },
     {
         "title": "❓  FAQ",

@@ -30,7 +30,7 @@ class AppConfig:
     MAX_FEATURES: int = int(os.getenv("APP_MAX_FEATURES", "10000"))
     DEFAULT_SRID: int = int(os.getenv("APP_DEFAULT_SRID", "4326"))
     APP_NAME: str = "Spaque"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.1.0"
     APP_DIR: Path = Path(__file__).parent
 
 

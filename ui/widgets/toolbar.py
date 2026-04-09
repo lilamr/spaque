@@ -20,7 +20,8 @@ class MainToolbar(QToolBar):
     query_builder_clicked = pyqtSignal()
     geoprocess_clicked    = pyqtSignal()
     sql_console_clicked   = pyqtSignal()
-    import_clicked        = pyqtSignal()   # ← NEW
+    import_clicked        = pyqtSignal()
+    pipeline_clicked      = pyqtSignal()   # ← NEW: Visual Pipeline Builder
     export_clicked        = pyqtSignal()
 
     # Quick geoprocess shortcuts
@@ -77,6 +78,7 @@ class MainToolbar(QToolBar):
         btn("📂  Import",     self.import_clicked,   "Import file spasial ke PostGIS  (Ctrl+I)", "success")
         btn("🔍  Query Builder", self.query_builder_clicked, "Visual Query Builder  (Ctrl+Q)", "success")
         btn("⚙  Geoprocessing",  self.geoprocess_clicked,   "Buka Geoprocessing Tools  (Ctrl+G)", "success")
+        btn("🔀  Pipeline",      self.pipeline_clicked,     "Visual Pipeline Builder  (Ctrl+P)", "success")
         btn("⌨  SQL Console",    self.sql_console_clicked,  "Buka SQL Console  (Ctrl+Shift+Q)")
         sep()
         btn("⭕ Buffer",    self.buffer_clicked,    "Buffer")

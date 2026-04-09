@@ -5,7 +5,7 @@
 [![PyQt6](https://img.shields.io/badge/PyQt6-6.6%2B-green)](https://pypi.org/project/PyQt6/)
 [![PostGIS](https://img.shields.io/badge/PostGIS-3.0%2B-orange)](https://postgis.net)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)]()
+[![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)]()
 
 Desktop GIS berbasis Python untuk **geoprocessing** dan **query spasial visual** via PostGIS.
 Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara manual.
@@ -18,6 +18,7 @@ Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara
 |---|---|
 | **Import File** | SHP, GeoJSON, GPKG, KML/KMZ, TAB, GML, GPX, FGB, DXF, GDB, CSV/TXT |
 | **Query Visual** | WHERE builder (AND/OR, semua operator SQL), ORDER BY, LIMIT |
+| **Pipeline Builder** | Visual Pipeline Builder — drag & drop node: Source → Query → Geoprocessing → Output |
 | **Overlay** | Buffer, Intersect, Union, Clip, Difference, Symmetric Difference |
 | **Geometri** | Centroid, Point on Surface, Convex Hull, Envelope, Simplify, Dissolve, Reproject, Voronoi, Delaunay |
 | **Kalkulasi** | Hitung Luas/Panjang/Perimeter (akurat di ellipsoid), Statistik Spasial |
