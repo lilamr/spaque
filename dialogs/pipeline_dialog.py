@@ -23,7 +23,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QPointF, QRectF, QLineF,
+    Qt, pyqtSignal, QPointF, QRectF, QLineF,
     QTimer,
 )
 from PyQt6.QtGui import (
@@ -305,18 +305,17 @@ class PipelineScene(QGraphicsScene):
 
 # ── Worker thread ──────────────────────────────────────────────────────────────
 
-class PipelineWorker(QThread):
-    progress = pyqtSignal(str)
-    finished = pyqtSignal(object)   # PipelineResult
+class _SyncProgressCallback:
+    """
+    Wrapper progress callback yang memanggil processEvents() agar
+    UI log panel terupdate saat pipeline berjalan synchronous.
+    """
+    def __init__(self, log_fn):
+        self._log = log_fn
 
-    def __init__(self, executor: PipelineExecutor, pipeline: Pipeline):
-        super().__init__()
-        self._executor = executor
-        self._pipeline = pipeline
-
-    def run(self):
-        result = self._executor.run(self._pipeline)
-        self.finished.emit(result)
+    def __call__(self, msg: str):
+        self._log(msg)
+        QApplication.processEvents()
 
 
 # ── Main Dialog ────────────────────────────────────────────────────────────────
@@ -1177,14 +1176,22 @@ class PipelineDialog(QDialog):
 
         self._run_btn.setEnabled(False)
         self._log_msg(f"▶ Menjalankan pipeline '{self._pipeline.name}'…")
+        QApplication.processEvents()
 
-        executor = PipelineExecutor(self._repo, progress_callback=self._log_msg)
-        self._worker = PipelineWorker(executor, self._pipeline)
-        self._worker.progress.connect(self._log_msg)
-        self._worker.finished.connect(self._on_run_done)
-        self._worker.start()
+        # Jalankan synchronous — tidak pakai QThread untuk menghindari
+        # segfault akibat race condition saat thread cleanup + Qt object access.
+        # processEvents() di callback memastikan UI tetap responsif.
+        cb       = _SyncProgressCallback(self._log_msg)
+        executor = PipelineExecutor(self._repo, progress_callback=cb)
 
-    def _on_run_done(self, result):
+        try:
+            result = executor.run(self._pipeline)
+        except Exception as exc:
+            self._run_btn.setEnabled(True)
+            self._log_msg(f"❌ Exception: {exc}")
+            QMessageBox.critical(self, "Pipeline Error", str(exc))
+            return
+
         self._run_btn.setEnabled(True)
 
         if result.success:
@@ -1192,17 +1199,11 @@ class PipelineDialog(QDialog):
             for step in result.steps:
                 status = "✅" if step.success else "❌"
                 self._log_msg(f"   {status} Node [{step.node_id}]: {step.message}")
-
-            QMessageBox.information(
-                self, "Pipeline Selesai",
-                f"✅ {result.message}\n\n"
-                f"Total langkah: {len(result.steps)}\n"
-                + (f"Output: {result.output_schema}.{result.output_table}\n"
-                   if result.output_table else "")
-            )
-            # Hapus GDF dari result sebelum emit ke main thread —
-            # GDF dibuat di QThread, passing antar thread menyebabkan segfault.
-            # Main window akan reload dari DB sendiri.
+            if result.output_table:
+                self._log_msg(
+                    f"💾 Output: {result.output_schema}.{result.output_table}"
+                )
+            # Strip GDF sebelum emit — tidak pass object besar antar context
             result.final_gdf = None
             for step in result.steps:
                 step.gdf = None
