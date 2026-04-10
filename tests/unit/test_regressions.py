@@ -65,7 +65,7 @@ class TestQueryBuilderDialogInit:
             dlg._columns  = []
             # Simulasikan _build_ui() hanya pada bagian yang bug:
             # addItems harus pakai self._layers bukan layers
-            items = [f"{l.schema}.{l.table_name}" for l in dlg._layers]
+            items = [f"{lyr.schema}.{lyr.table_name}" for lyr in dlg._layers]
             assert len(items) == 3
             assert "public.pohon" in items
         except NameError as e:
@@ -107,13 +107,13 @@ class TestQueryBuilderDialogInit:
             LayerInfo("public", "a", "geom", "POINT", 4326, 1),
             LayerInfo("forestdb", "b", "geom", "POLYGON", 4326, 1),
         ]
-        items = [f"{l.schema}.{l.table_name}" for l in layers]
+        items = [f"{lyr.schema}.{lyr.table_name}" for lyr in layers]
         assert items == ["public.a", "forestdb.b"]
 
     def test_empty_layers_no_crash(self):
         """Dialog dengan daftar layer kosong tidak boleh crash."""
         layers = []
-        items = [f"{l.schema}.{l.table_name}" for l in layers]
+        items = [f"{lyr.schema}.{lyr.table_name}" for lyr in layers]
         assert items == []
 
 
@@ -651,7 +651,8 @@ class TestGeometryNormalization:
 
     def _strip_z(self, geom):
         from shapely.ops import transform as shp_transform
-        if geom is None or geom.is_empty: return geom
+        if geom is None or geom.is_empty:
+            return geom
         if geom.has_z:
             return shp_transform(lambda x, y, z=None: (x, y), geom)
         return geom
@@ -660,12 +661,17 @@ class TestGeometryNormalization:
         from shapely.geometry import (
             Polygon, MultiPolygon, LineString, Point, MultiPoint
         )
-        if geom is None or geom.is_empty: return None
+        if geom is None or geom.is_empty:
+            return None
         geom = self._strip_z(geom)
-        if isinstance(geom, Polygon):      return MultiPolygon([geom])
-        if isinstance(geom, MultiPolygon): return geom
-        if isinstance(geom, Point):        return MultiPoint([geom])
-        if isinstance(geom, MultiPoint):   return geom
+        if isinstance(geom, Polygon):
+            return MultiPolygon([geom])
+        if isinstance(geom, MultiPolygon):
+            return geom
+        if isinstance(geom, Point):
+            return MultiPoint([geom])
+        if isinstance(geom, MultiPoint):
+            return geom
         return geom
 
     def test_polygon_z_to_multipolygon_2d(self):

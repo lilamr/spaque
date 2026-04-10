@@ -341,8 +341,6 @@ class Reproject(BaseGeoprocess):
     def build_sql(self, spec: GeoprocessSpec) -> str:
         gc  = self._col(spec.input_geom)
         tbl = self._q(spec.input_schema, spec.input_table)
-        # Ganti kolom geom asli dengan yang sudah di-reproject
-        non_geom_cols = "*"  # akan include semua kolom + kolom geom baru
         return (
             f"SELECT *,\n"
             f"  ST_Transform({gc}, {spec.target_srid}) AS geom_reproj\n"

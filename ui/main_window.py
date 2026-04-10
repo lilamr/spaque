@@ -297,7 +297,7 @@ class MainWindow(QMainWindow):
     def _wire_layer_browser(self):
         lb = self._layer_browser
         lb.layer_activated.connect(self._load_layer)
-        lb.layer_selected.connect(lambda l: setattr(self, '_current_layer', l))
+        lb.layer_selected.connect(lambda layer: setattr(self, '_current_layer', layer))
         lb.layer_attributes.connect(self._load_layer_attrs)
         lb.layer_delete_requested.connect(self._delete_layer)
         lb.refresh_requested.connect(self._refresh_layers)

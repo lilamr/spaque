@@ -191,15 +191,15 @@ class GeoprocessDialog(QDialog):
         root.addWidget(right, 1)
 
     def _lbl(self, text: str) -> QLabel:
-        l = QLabel(text)
-        l.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
-        return l
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
+        return lbl
 
     # ── Param widgets ─────────────────────────────────────────────────────────
 
     def _init_param_widgets(self):
         """Create all possible param widgets once (shown/hidden per op)."""
-        table_items = [f"{l.schema}.{l.table_name}" for l in self._layers]
+        table_items = [f"{lyr.schema}.{lyr.table_name}" for lyr in self._layers]
 
         def combo(items=None):
             cb = QComboBox()

@@ -67,7 +67,7 @@ class QueryBuilderDialog(QDialog):
         tbl_lbl.setStyleSheet("color:#6a7590;font-weight:600;font-size:12px;")
         self._table_cb = QComboBox()
         self._table_cb.setFixedHeight(34)
-        self._table_cb.addItems([f"{l.schema}.{l.table_name}" for l in self._layers])
+        self._table_cb.addItems([f"{lyr.schema}.{lyr.table_name}" for lyr in self._layers])
         self._table_cb.currentIndexChanged.connect(self._on_table_changed)
         tbl_row.addWidget(tbl_lbl)
         tbl_row.addWidget(self._table_cb, 1)

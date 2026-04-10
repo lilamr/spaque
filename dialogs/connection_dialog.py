@@ -3,7 +3,7 @@ dialogs/connection_dialog.py — PostGIS connection setup dialog
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple
+from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -97,8 +97,6 @@ class ConnectionDialog(QDialog):
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        lbl = lambda t: self._lbl(t)
-
         self.host_edit  = QLineEdit("localhost")
         self.port_spin  = QSpinBox()
         self.port_spin.setRange(1, 65535)
@@ -111,11 +109,11 @@ class ConnectionDialog(QDialog):
         self.pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.pass_edit.setPlaceholderText("••••••••")
 
-        form.addRow(lbl("Host"), self.host_edit)
-        form.addRow(lbl("Port"), self.port_spin)
-        form.addRow(lbl("Database"), self.db_edit)
-        form.addRow(lbl("Username"), self.user_edit)
-        form.addRow(lbl("Password"), self.pass_edit)
+        form.addRow(self._lbl("Host"), self.host_edit)
+        form.addRow(self._lbl("Port"), self.port_spin)
+        form.addRow(self._lbl("Database"), self.db_edit)
+        form.addRow(self._lbl("Username"), self.user_edit)
+        form.addRow(self._lbl("Password"), self.pass_edit)
         bl.addLayout(form)
 
         self._status = QLabel("")

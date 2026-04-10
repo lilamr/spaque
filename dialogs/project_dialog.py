@@ -73,9 +73,9 @@ class ProjectPropertiesDialog(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         def lbl(t):
-            l = QLabel(t)
-            l.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
-            return l
+            widget = QLabel(t)
+            widget.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
+            return widget
 
         self._name_edit = QLineEdit(self._state.name)
         self._name_edit.setFixedHeight(32)
@@ -245,7 +245,7 @@ def ask_save_changes(parent, project_name: str) -> str:
 
     save_btn    = msg.addButton("💾  Simpan",  QMessageBox.ButtonRole.AcceptRole)
     discard_btn = msg.addButton("Buang",       QMessageBox.ButtonRole.DestructiveRole)
-    cancel_btn  = msg.addButton("Batal",       QMessageBox.ButtonRole.RejectRole)
+    msg.addButton("Batal",       QMessageBox.ButtonRole.RejectRole)
 
     msg.exec()
     clicked = msg.clickedButton()

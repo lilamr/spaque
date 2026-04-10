@@ -40,6 +40,8 @@ from core.importers.base import (
 from core.services.import_service import ImportService
 from utils.constants import COMMON_SRID
 from utils.logger import get_logger
+import re
+import re
 
 logger = get_logger("spaque.dialogs.import")
 
@@ -483,9 +485,9 @@ class ImportDialog(QDialog):
         return grp
 
     def _lbl(self, text: str) -> QLabel:
-        l = QLabel(text)
-        l.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
-        return l
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color:#6a7590;font-size:12px;font-weight:600;")
+        return lbl
 
     def _hw(self, layout) -> QWidget:
         """Wrap a layout in a widget."""
@@ -650,7 +652,7 @@ class ImportDialog(QDialog):
         if spec.if_exists == "fail":
             try:
                 if self._svc.table_exists(spec.target_schema, spec.resolved_table):
-                    ans = QMessageBox.question(
+                    QMessageBox.question(
                         self, "Tabel Sudah Ada",
                         f'Tabel "{spec.target_schema}"."{spec.resolved_table}" sudah ada.\n\n'
                         "Ganti pilihan 'Jika Sudah Ada' menjadi 'Timpa' atau 'Tambahkan', "
@@ -707,5 +709,3 @@ class ImportDialog(QDialog):
             QMessageBox.critical(self, "Import Gagal", result.message)
 
 
-# ── Fix missing import ────────────────────────────────────────────────────────
-import re

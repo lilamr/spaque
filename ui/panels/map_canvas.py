@@ -511,12 +511,12 @@ code{background:#13151a;border:1px solid #2d3340;border-radius:4px;padding:2px 8
                     return MultiPolygon(all_polys)
                 if lines:
                     all_lines = []
-                    for l in lines:
-                        l = _strip_z(l)
-                        if isinstance(l, LineString):
-                            all_lines.append(l)
+                    for ln in lines:
+                        ln = _strip_z(ln)
+                        if isinstance(ln, LineString):
+                            all_lines.append(ln)
                         else:
-                            all_lines.extend(l.geoms)
+                            all_lines.extend(ln.geoms)
                     return MultiLineString(all_lines)
                 if pts:
                     all_pts = []

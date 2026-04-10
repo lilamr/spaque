@@ -90,7 +90,7 @@ jobs:
           fail_ci_if_error: false
 
   lint:
-    name: Lint (flake8)
+    name: Lint (ruff)
     runs-on: ubuntu-22.04
 
     steps:
@@ -101,14 +101,12 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install flake8
-        run: pip install flake8
+      - name: Install ruff
+        run: pip install ruff
 
-      - name: Run flake8
+      - name: Run ruff check
         run: |
-          flake8 core/ utils/ \
-            --max-line-length=120 \
-            --extend-ignore=E203,W503,E501 \
-            --exclude=__pycache__,.venv \
-            --statistics \
-            --count
+          ruff check core/ utils/ \
+            --line-length 120 \
+            --ignore E203,W503,E501 \
+            --statistics

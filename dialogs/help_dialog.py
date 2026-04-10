@@ -478,14 +478,12 @@ def _md_to_html(md: str) -> str:
     html_lines = []
     in_table = False
     in_code  = False
-    code_buf = []
 
     for line in lines:
         # Code block
         if line.strip().startswith('```'):
             if not in_code:
                 in_code = True
-                lang = line.strip()[3:].strip()
                 html_lines.append(
                     '<pre style="background:#0f1116;color:#7adb78;'
                     'padding:10px;border-radius:6px;font-family:monospace;'
@@ -511,9 +509,7 @@ def _md_to_html(md: str) -> str:
             cells = [c.strip() for c in line.split('|')[1:-1]]
             if all(set(c.replace('-','').replace(':','').strip()) == set() or c.strip().replace('-','').replace(':','') == '' for c in cells):
                 continue  # separator row
-            is_header = html_lines and '<table' in html_lines[-1] or \
-                        (len(html_lines) >= 2 and '<table' in ''.join(html_lines[-3:]))
-            tag = 'th' if '---' not in line and not any('<tr>' in l for l in html_lines[-5:]) else 'td'
+            tag = 'th' if '---' not in line and not any('<tr>' in ln for ln in html_lines[-5:]) else 'td'
             row = '<tr>' + ''.join(
                 f'<{tag} style="border:1px solid #2d3340;padding:5px 8px;'
                 f'background:{"#13151a" if tag=="th" else "transparent"};'

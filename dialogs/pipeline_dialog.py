@@ -415,7 +415,8 @@ class PipelineDialog(QDialog):
         hl.addWidget(name_lbl)
         hl.addWidget(self._name_edit)
 
-        sep = lambda: self._vsep()
+        def sep():
+            return self._vsep()
 
         # Action buttons
         hl.addWidget(sep())
@@ -717,9 +718,9 @@ class PipelineDialog(QDialog):
         self._props_layout.addStretch()
 
     def _lbl(self, text: str) -> QLabel:
-        l = QLabel(text)
-        l.setStyleSheet("color:#6a7590;font-size:11px;font-weight:600;")
-        return l
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color:#6a7590;font-size:11px;font-weight:600;")
+        return lbl
 
     def _show_node_props(self, node: PipelineNode):
         """Build form widgets for a node."""
@@ -773,7 +774,7 @@ class PipelineDialog(QDialog):
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        layer_items = [f"{l.schema}.{l.table_name}" for l in self._layers]
+        layer_items = [f"{lyr.schema}.{lyr.table_name}" for lyr in self._layers]
         layer_cb = QComboBox()
         layer_cb.setFixedHeight(28)
         layer_cb.addItems(layer_items)
@@ -814,7 +815,7 @@ class PipelineDialog(QDialog):
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        layer_items = [f"{l.schema}.{l.table_name}" for l in self._layers]
+        layer_items = [f"{lyr.schema}.{lyr.table_name}" for lyr in self._layers]
         layer_cb = QComboBox()
         layer_cb.setFixedHeight(28)
         layer_cb.addItems(layer_items)
@@ -913,7 +914,7 @@ class PipelineDialog(QDialog):
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        layer_items    = [f"{l.schema}.{l.table_name}" for l in self._layers]
+        layer_items    = [f"{lyr.schema}.{lyr.table_name}" for lyr in self._layers]
         layer_items_ov = ["(tidak ada)"] + layer_items
 
         # ── Operasi ────────────────────────────────────────────────────────────
@@ -947,8 +948,8 @@ class PipelineDialog(QDialog):
                 node.params["input_schema"] = parts[0]
                 node.params["input_table"]  = parts[1]
                 node.params["input_geom"]   = next(
-                    (l.geom_col for l in self._layers
-                     if l.schema == parts[0] and l.table_name == parts[1]), "geom")
+                    (lyr.geom_col for lyr in self._layers
+                     if lyr.schema == parts[0] and lyr.table_name == parts[1]), "geom")
 
         def on_inp_chg(text):
             parts = text.split(".", 1)
@@ -956,8 +957,8 @@ class PipelineDialog(QDialog):
                 node.params["input_schema"] = parts[0]
                 node.params["input_table"]  = parts[1]
                 node.params["input_geom"]   = next(
-                    (l.geom_col for l in self._layers
-                     if l.schema == parts[0] and l.table_name == parts[1]), "geom")
+                    (lyr.geom_col for lyr in self._layers
+                     if lyr.schema == parts[0] and lyr.table_name == parts[1]), "geom")
 
         inp_cb.currentTextChanged.connect(on_inp_chg)
         form.addRow(self._lbl("Layer Input:"), inp_cb)
@@ -986,8 +987,8 @@ class PipelineDialog(QDialog):
                     node.params["overlay_schema"] = parts[0]
                     node.params["overlay_table"]  = parts[1]
                     node.params["overlay_geom"]   = next(
-                        (l.geom_col for l in self._layers
-                         if l.schema == parts[0] and l.table_name == parts[1]), "geom")
+                        (lyr.geom_col for lyr in self._layers
+                         if lyr.schema == parts[0] and lyr.table_name == parts[1]), "geom")
 
         ov_cb.currentTextChanged.connect(on_ov_chg)
         form.addRow(self._lbl("Layer Overlay:"), ov_cb)
