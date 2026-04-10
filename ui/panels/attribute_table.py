@@ -4,15 +4,14 @@ ui/panels/attribute_table.py — Bottom panel: attribute table + SQL console + l
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
-import geopandas as gpd
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QTabWidget, QTextEdit, QPushButton, QSizePolicy,
+    QTabWidget, QTextEdit, QPushButton,
 )
 
 from utils.logger import get_logger

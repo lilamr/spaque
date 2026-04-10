@@ -8,14 +8,14 @@ Dua dialog:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QTextEdit, QPushButton,
     QFrame, QListWidget, QListWidgetItem,
-    QMessageBox, QSizePolicy,
+    QMessageBox,
 )
 
 from core.project.model import ProjectState

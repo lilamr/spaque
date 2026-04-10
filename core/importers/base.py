@@ -6,14 +6,12 @@ Spatial file import pipeline: read file → validate → push to PostGIS.
 from __future__ import annotations
 
 import re
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
 import geopandas as gpd
 import pandas as pd
-from pyproj import CRS
 
 from utils.logger import get_logger
 
@@ -312,7 +310,8 @@ class SpatialImporter:
 
     def _read_kmz(self, path: Path) -> gpd.GeoDataFrame:
         """Unzip KMZ and read the inner KML."""
-        import zipfile, tempfile
+        import zipfile
+        import tempfile
         with zipfile.ZipFile(str(path)) as zf:
             kml_files = [n for n in zf.namelist() if n.endswith(".kml")]
             if not kml_files:

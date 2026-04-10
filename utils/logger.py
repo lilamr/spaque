@@ -4,8 +4,6 @@ utils/logger.py — Centralized logging with Qt signal emission
 
 import logging
 import sys
-from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal

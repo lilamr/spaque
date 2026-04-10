@@ -3,8 +3,8 @@ core/domain/entities/layer.py — Layer entity (immutable value-like)
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)

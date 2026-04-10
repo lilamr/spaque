@@ -17,7 +17,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import geopandas as gpd
 
-from core.pipeline.model import Pipeline, PipelineNode
+from core.pipeline.model import Pipeline
 from core.domain.value_objects import GeoprocessSpec
 from core.geoprocessing.factory import GeoprocessFactory
 from utils.logger import get_logger

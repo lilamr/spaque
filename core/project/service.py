@@ -11,8 +11,7 @@ from typing import List, Optional, Tuple
 
 from core.project.model import (
     ProjectState, DBState, ActiveLayerState,
-    WindowState, MapState, SQLConsoleState,
-    QueryHistoryEntry, BookmarkEntry,
+    WindowState, QueryHistoryEntry, BookmarkEntry,
     SPQ_EXTENSION,
 )
 from core.project.serializer import ProjectSerializer

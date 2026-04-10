@@ -2,7 +2,8 @@
 tests/unit/test_importers.py — Unit tests for spatial file import pipeline
 """
 
-import sys, os, tempfile, json
+import sys
+import os
 from pathlib import Path
 
 import pytest

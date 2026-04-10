@@ -5,7 +5,7 @@ Orchestrates layer discovery, metadata, and data loading.
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import geopandas as gpd
 

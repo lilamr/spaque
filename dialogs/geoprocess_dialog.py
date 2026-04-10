@@ -14,9 +14,9 @@ from PyQt6.QtWidgets import (
     QGroupBox, QScrollArea, QWidget,
 )
 
-from core.domain.entities.layer import LayerInfo, LayerColumn
+from core.domain.entities.layer import LayerInfo
 from core.domain.value_objects import GeoprocessSpec
-from core.geoprocessing.factory import GeoprocessFactory, REGISTRY
+from core.geoprocessing.factory import GeoprocessFactory
 from utils.constants import SPATIAL_PREDICATES, JOIN_TYPES, AREA_UNITS, COMMON_SRID
 
 

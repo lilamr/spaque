@@ -6,18 +6,16 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QComboBox, QLineEdit, QPushButton,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
     QFrame, QTextEdit, QGroupBox, QSpinBox,
-    QCheckBox, QApplication,
+    QCheckBox,
 )
 
 from core.domain.entities.layer import LayerInfo, LayerColumn
-from core.domain.value_objects import QuerySpec, WhereCondition
+from core.domain.value_objects import QuerySpec
 from ui.widgets.query_builder import QueryBuilderWidget
-from utils.constants import QUERY_OPERATORS
 
 
 class QueryBuilderDialog(QDialog):

@@ -5,17 +5,15 @@ Wires all panels, dialogs, services, and workers together.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional, List
 
 import geopandas as gpd
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QSplitter, QMessageBox, QFileDialog, QApplication,
-    QStatusBar, QProgressBar, QLabel,
+    QMainWindow, QWidget, QVBoxLayout, QSplitter, QMessageBox, QFileDialog, QApplication,
+    QProgressBar, QLabel,
 )
 
 from config import AppConfig, UIConfig
@@ -43,13 +41,12 @@ from dialogs.pipeline_dialog import PipelineDialog
 from dialogs.project_dialog import (
     ProjectPropertiesDialog, RecentProjectsDialog, ask_save_changes
 )
-from dialogs.help_dialog import HelpDialog, open_help
+from dialogs.help_dialog import open_help
 
 from core.project.service import ProjectService
 from core.project.model import SPQ_EXTENSION
 
 from utils.logger import get_logger, get_qt_handler
-from utils.helpers import slugify
 
 
 logger = get_logger("spaque.main_window")
@@ -352,7 +349,7 @@ class MainWindow(QMainWindow):
             self._update_title()
             self._refresh_layers()
         else:
-            self.statusBar().showMessage(f"❌ Gagal terhubung")
+            self.statusBar().showMessage("❌ Gagal terhubung")
             QMessageBox.critical(self, "Koneksi Gagal", msg)
 
     def _disconnect(self):
@@ -577,7 +574,6 @@ class MainWindow(QMainWindow):
             return
         self._set_busy(True)
         self.statusBar().showMessage(f"⏳ Menyimpan hasil query ke tabel '{table_name}'…")
-        from core.database.postgis import PostGISDatabase
         ok, msg, count = self._postgis.create_table_from_sql(sql, "public", table_name)
         self._set_busy(False)
         if ok:
@@ -677,7 +673,7 @@ class MainWindow(QMainWindow):
     def _on_geoprocess_done(self, result):
         self._set_busy(False)
         if result.has_error:
-            self.statusBar().showMessage(f"❌ Geoprocess gagal")
+            self.statusBar().showMessage("❌ Geoprocess gagal")
             logger.error("Geoprocess error: %s", result.message)
             QMessageBox.critical(self, "Geoprocessing Gagal", result.message)
             return

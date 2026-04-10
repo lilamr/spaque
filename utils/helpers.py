@@ -5,7 +5,7 @@ utils/helpers.py — General-purpose utility functions
 from __future__ import annotations
 
 import re
-from typing import Any, List, Optional
+from typing import List, Optional
 
 
 def slugify(text: str, max_len: int = 50) -> str:

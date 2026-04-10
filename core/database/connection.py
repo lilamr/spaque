@@ -11,7 +11,6 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 
-from config import DatabaseConfig
 from core.domain.value_objects import ConnectionParams
 from utils.logger import get_logger
 

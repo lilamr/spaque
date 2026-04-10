@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import gzip
 import json
-import struct
 from pathlib import Path
 from typing import Tuple
 
@@ -87,8 +86,8 @@ class ProjectSerializer:
             # Validate magic header
             if not raw.startswith(_MAGIC_BYTES):
                 return None, (
-                    f"File bukan project Spaque yang valid.\n"
-                    f"Pastikan file berekstensi .spq dan dibuat oleh Spaque."
+                    "File bukan project Spaque yang valid.\n"
+                    "Pastikan file berekstensi .spq dan dibuat oleh Spaque."
                 )
 
             # Decompress

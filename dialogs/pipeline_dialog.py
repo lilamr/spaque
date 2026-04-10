@@ -19,32 +19,26 @@ Layout:
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QPointF, QRectF, QLineF,
-    QTimer,
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QFont, QPainterPath,
-    QKeySequence,
 )
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QFrame, QScrollArea, QWidget,
     QTextEdit, QLineEdit, QComboBox, QDoubleSpinBox,
     QSpinBox, QCheckBox, QFormLayout, QGroupBox,
-    QFileDialog, QMessageBox, QApplication, QSizePolicy,
-    QGraphicsScene, QGraphicsView, QGraphicsItem,
-    QGraphicsRectItem, QGraphicsTextItem, QGraphicsLineItem,
-    QGraphicsEllipseItem, QMenu, QTabWidget,
+    QFileDialog, QMessageBox, QApplication, QGraphicsScene, QGraphicsView, QGraphicsItem,
+    QGraphicsRectItem, QGraphicsTextItem, QGraphicsEllipseItem, QMenu,
 )
 
-from core.pipeline.model import Pipeline, PipelineNode, PipelineEdge, NODE_TYPES
+from core.pipeline.model import Pipeline, PipelineNode, NODE_TYPES
 from core.pipeline.executor import PipelineExecutor
 from core.geoprocessing.factory import GeoprocessFactory
-from utils.constants import SPATIAL_PREDICATES, JOIN_TYPES, AREA_UNITS, COMMON_SRID
 from utils.logger import get_logger
 
 logger = get_logger("spaque.dialogs.pipeline")

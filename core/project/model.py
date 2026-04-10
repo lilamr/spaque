@@ -12,7 +12,7 @@ File .spq adalah JSON terenkripsi (base64 gzip) dengan struktur:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from datetime import datetime
 
 

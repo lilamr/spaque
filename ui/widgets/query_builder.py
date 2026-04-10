@@ -5,12 +5,12 @@ dengan dropdown nilai otomatis dari database.
 
 from __future__ import annotations
 
-from typing import List, Optional, Callable
+from typing import List
 
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QComboBox, QLineEdit, QPushButton,
+    QComboBox, QPushButton,
     QScrollArea,
 )
 

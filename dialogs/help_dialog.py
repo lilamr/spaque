@@ -6,9 +6,8 @@ Jendela bantuan dengan tampilan dokumentasi Markdown.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter,
     QListWidget, QListWidgetItem, QTextBrowser,

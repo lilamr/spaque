@@ -5,7 +5,7 @@ ui/widgets/toolbar.py — Main application toolbar
 from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal, QSize
-from PyQt6.QtWidgets import QToolBar, QPushButton, QFrame, QLabel
+from PyQt6.QtWidgets import QToolBar, QPushButton, QFrame
 
 
 class MainToolbar(QToolBar):

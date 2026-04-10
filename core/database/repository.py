@@ -8,7 +8,6 @@ from typing import List, Optional, Tuple
 
 import geopandas as gpd
 
-from core.database.connection import DatabaseConnection
 from core.database.postgis import PostGISDatabase
 from core.domain.entities.layer import LayerInfo, LayerColumn
 from utils.logger import get_logger

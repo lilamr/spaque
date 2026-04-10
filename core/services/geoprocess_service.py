@@ -13,7 +13,6 @@ import geopandas as gpd
 from core.database.repository import LayerRepository
 from core.domain.value_objects import GeoprocessSpec
 from core.geoprocessing.factory import GeoprocessFactory
-from core.geoprocessing.exceptions import GeoprocessError, MissingLayerError
 from utils.logger import get_logger
 
 logger = get_logger("spaque.services.geoprocess")

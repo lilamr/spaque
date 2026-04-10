@@ -5,13 +5,12 @@ Orchestrates spatial file → PostGIS import.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional, Tuple
 
 import geopandas as gpd
 
 from core.database.connection import DatabaseConnection
-from core.importers.base import SpatialImporter, ImportSpec, ImportResult, get_file_info
+from core.importers.base import SpatialImporter, ImportSpec, ImportResult
 from utils.logger import get_logger
 
 logger = get_logger("spaque.services.import")

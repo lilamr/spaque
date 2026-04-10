@@ -3,7 +3,8 @@ tests/unit/test_geoprocessing.py — Unit tests for SQL builders
 """
 
 import pytest
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from core.domain.value_objects import GeoprocessSpec, QuerySpec, WhereCondition

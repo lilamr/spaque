@@ -15,11 +15,9 @@ Solusi:
 
 from __future__ import annotations
 
-import json
 import tempfile
-from typing import List, Optional
+from typing import List
 
-import geopandas as gpd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -52,7 +50,8 @@ def _get_leaflet_assets() -> tuple[str, str]:
     Prioritas: 1) cached lokal, 2) CDN.
     """
     try:
-        import sys, os
+        import sys
+        import os
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from core.leaflet_cache import get_leaflet_js, get_leaflet_css
         js  = get_leaflet_js()
@@ -423,7 +422,6 @@ code{background:#13151a;border:1px solid #2d3340;border-radius:4px;padding:2px 8
         # Exclude ALL geometry-type columns from properties
         # (GeoDataFrame bisa punya >1 kolom geom, mis. geom + geom_buffer)
         from shapely.geometry.base import BaseGeometry
-        import geopandas as _gpd
         def _is_geom_col(series):
             """Cek apakah series berisi geometri (dtype geometry atau object berisi shapely)."""
             if hasattr(series, 'geom_type'):   # GeoSeries
@@ -596,7 +594,8 @@ code{background:#13151a;border:1px solid #2d3340;border-radius:4px;padding:2px 8
             from core.leaflet_cache import is_available as leaflet_cached
             if leaflet_cached():
                 # Leaflet di-embed inline → load via file:// (fully offline)
-                import tempfile, os
+                import tempfile
+                import os
                 tmp = tempfile.NamedTemporaryFile(
                     suffix=".html", delete=False, prefix="spaque_map_",
                     mode="w", encoding="utf-8"
