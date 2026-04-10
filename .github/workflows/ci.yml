@@ -108,5 +108,5 @@ jobs:
         run: |
           ruff check core/ utils/ \
             --line-length 120 \
-            --ignore E203,W503,E501 \
+            --ignore E203,E501 \
             --statistics
