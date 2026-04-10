@@ -21,26 +21,23 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
-    QLabel, QLineEdit, QComboBox, QSpinBox, QPushButton,
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox, QPushButton,
     QFrame, QGroupBox, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QFileDialog, QMessageBox, QProgressBar,
-    QSplitter, QScrollArea, QWidget, QApplication, QTabWidget,
-    QSizePolicy, QRadioButton, QButtonGroup,
+    QScrollArea, QWidget, QApplication, QRadioButton, QButtonGroup,
 )
 
 from core.importers.base import (
     ImportSpec, ImportResult,
-    FORMAT_REGISTRY, SUPPORTED_EXTENSIONS, FILE_FILTER,
+    FORMAT_REGISTRY, FILE_FILTER,
     get_file_info,
 )
 from core.services.import_service import ImportService
 from utils.constants import COMMON_SRID
 from utils.logger import get_logger
-import re
 import re
 
 logger = get_logger("spaque.dialogs.import")

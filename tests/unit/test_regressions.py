@@ -7,7 +7,8 @@ Filosofi: test PERILAKU yang bisa diamati dari luar, bukan implementasi.
 Kalau user bisa merasakannya sebagai bug → ada test-nya di sini.
 """
 
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import pytest
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point, Polygon, LineString
+from shapely.geometry import Point, Polygon
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ class TestQueryBuilderDialogInit:
         ).read()
 
         # Parse semua baris di dalam _build_ui yang pakai 'layers' tanpa self.
-        import ast, textwrap
+        import ast
         tree = ast.parse(src)
         build_ui_node = next(
             n for n in ast.walk(tree)
@@ -215,7 +216,6 @@ class TestMapCanvasGeomColumnExclusion:
         Kolom object dtype yang isinya Shapely juga harus dikecualikan,
         bukan hanya yang punya dtype='geometry'.
         """
-        import pandas as pd
         from shapely.geometry import Point
         df = pd.DataFrame({
             "nama": ["X"],
@@ -242,7 +242,7 @@ class TestMapCanvasGeoJSONSerialization:
 
     def _build_features_from_gdf(self, gdf):
         """Replikasi logika feature building dari map_canvas._render()."""
-        import json, numpy as np
+        import numpy as np
         from shapely.geometry.base import BaseGeometry
 
         def _is_geom_col(series):
@@ -359,7 +359,7 @@ class TestMapCanvasGeoJSONSerialization:
 
     def test_nan_values_become_null(self):
         """NaN di float column harus jadi None (null di JSON), bukan crash."""
-        import json, numpy as np
+        import json
         gdf = gpd.GeoDataFrame(
             {"nama": ["X"], "nilai": [float("nan")]},
             geometry=[Point(0,0)],
@@ -371,7 +371,8 @@ class TestMapCanvasGeoJSONSerialization:
 
     def test_numpy_int_serializable(self):
         """numpy int64 harus di-convert ke Python int agar JSON-serializable."""
-        import json, numpy as np
+        import json
+        import numpy as np
         gdf = gpd.GeoDataFrame(
             {"count": [np.int64(42)]},
             geometry=[Point(0,0)],
@@ -576,7 +577,8 @@ class TestZCoordinateStripping:
         REGRESSION: POLYGON Z setelah strip harus menghasilkan GeoJSON
         yang valid — tidak ada array koordinat [x, y, z], hanya [x, y].
         """
-        import json, re
+        import json
+        import re
         from shapely.geometry import Polygon
         poly_z = Polygon([
             (116.5, -8.5, 250), (117.5, -8.5, 300),
@@ -659,7 +661,7 @@ class TestGeometryNormalization:
 
     def _to_multi(self, geom):
         from shapely.geometry import (
-            Polygon, MultiPolygon, LineString, Point, MultiPoint
+            Polygon, MultiPolygon, Point, MultiPoint
         )
         if geom is None or geom.is_empty:
             return None
@@ -684,7 +686,6 @@ class TestGeometryNormalization:
 
     def test_polygon_2d_to_multipolygon(self):
         """POLYGON 2D → MultiPolygon."""
-        from shapely.geometry import MultiPolygon
         p = Polygon([(116.5,-8.5),(117.5,-8.5),(117.5,-7.5),(116.5,-7.5),(116.5,-8.5)])
         r = self._to_multi(p)
         assert r.geom_type == 'MultiPolygon'
