@@ -1,4 +1,8 @@
-# 🌍 Spaque — PostGIS Desktop GIS
+# Spaque — Spasial Query and Geoprocessing PostGIS
+
+<div align="center">
+
+<img src="spaque/assets/icons/icon.png" width="120" alt="SpaQue Logo">
 
 [![GitHub](https://img.shields.io/badge/GitHub-lilamr%2Fspaque-blue?logo=github)](https://github.com/lilamr/spaque)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
@@ -9,6 +13,8 @@
 
 Desktop GIS berbasis Python untuk **geoprocessing** dan **query spasial visual** via PostGIS.
 Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara manual.
+
+</div>
 
 ---
 
