@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="assets/icons/icon.png" width="256" alt="SpaQue Logo">
+<img src="assets/icons/icon.png" width="128" alt="SpaQue Logo">
 
 [![GitHub](https://img.shields.io/badge/GitHub-lilamr%2Fspaque-blue?logo=github)](https://github.com/lilamr/spaque)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
