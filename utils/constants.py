@@ -12,6 +12,7 @@ GEOM_ICONS = {
     "MULTIPOLYGON": "🔷",
     "GEOMETRY": "🌐",
     "GEOMETRYCOLLECTION": "🌐",
+    "TABLE": "📋",
 }
 
 # ── Spatial predicates ────────────────────────────────────────────────────────

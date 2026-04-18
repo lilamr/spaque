@@ -372,6 +372,16 @@ Hasil geoprocessing sudah tersimpan sebagai tabel baru di PostGIS. Untuk export:
 """,
     },
     {
+        "title": "📂  Import File",
+        "file":  "panduan-import.md",
+        "content": None,
+    },
+    {
+        "title": "📋  Tabel Atribut",
+        "file":  "panduan-tabel-atribut.md",
+        "content": None,
+    },
+    {
         "title": "🔀  Pipeline Builder",
         "file":  "panduan-pipeline-builder.md",
         "content": None,

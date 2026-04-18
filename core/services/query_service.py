@@ -58,3 +58,15 @@ class QueryService:
         except Exception as exc:
             logger.error("Query failed: %s", exc)
             return QueryResult(None, [], [], sql, error=str(exc))
+
+    def fetch_all_rows(self, layer_name: str, geom_col: Optional[str] = None) -> QueryResult:
+        """Fetch ALL rows without LIMIT for popup windows."""
+        sql = f"SELECT * FROM {layer_name}"
+        logger.info("Executing SQL (all rows): %.120s", sql)
+        try:
+            gdf, cols, rows = self._repo.execute_sql(sql, geom_col, row_limit=None)
+            logger.info("Query OK: %d rows", len(rows))
+            return QueryResult(gdf, cols, rows, sql)
+        except Exception as exc:
+            logger.error("Query failed: %s", exc)
+            return QueryResult(None, [], [], sql, error=str(exc))

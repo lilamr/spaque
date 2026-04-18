@@ -71,6 +71,19 @@ class _ImportWorker(QThread):
         self.done.emit(result)
 
 
+class _NonSpatialImportWorker(QThread):
+    done = pyqtSignal(object)   # NonSpatialImportResult
+
+    def __init__(self, service: ImportService, spec: ImportSpec):
+        super().__init__()
+        self._svc  = service
+        self._spec = spec
+
+    def run(self):
+        result = self._svc.import_non_spatial(self._spec)
+        self.done.emit(result)
+
+
 # ── Main Dialog ───────────────────────────────────────────────────────────────
 
 class ImportDialog(QDialog):
@@ -134,6 +147,7 @@ class ImportDialog(QDialog):
         self._build_file_section(cl)
         self._build_target_section(cl)
         self._build_crs_section(cl)
+        self._build_pk_section(cl)
         self._build_csv_section(cl)
         self._build_preview_section(cl)
         cl.addStretch()
@@ -167,8 +181,9 @@ class ImportDialog(QDialog):
             ("①", "Pilih File"),
             ("②", "Target Database"),
             ("③", "Sistem Koordinat"),
-            ("④", "Opsi CSV"),
-            ("⑤", "Preview Data"),
+            ("④", "Primary Key"),
+            ("⑤", "Opsi CSV"),
+            ("⑥", "Preview Data"),
         ]
         self._step_labels = []
         for num, text in steps:
@@ -351,12 +366,79 @@ class ImportDialog(QDialog):
         form.addRow(self._lbl(""), self._hw(repr_row))
         layout.addWidget(grp)
 
+    def _build_pk_section(self, layout):
+        grp = self._section("④ Primary Key")
+        form = QFormLayout(grp)
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        # Strategy radio buttons
+        self._pk_bg = QButtonGroup(self)
+        strat_row = QHBoxLayout()
+        strat_row.setSpacing(16)
+        for val, label, tip in [
+            ("auto",   "Buat otomatis (_gid)",   "Tambahkan kolom _gid SERIAL PRIMARY KEY"),
+            ("column", "Pilih kolom existing",   "Jadikan kolom yang sudah ada sebagai PK"),
+            ("none",   "Tanpa PK",               "Tidak buat PK (fitur Edit tabel tidak tersedia)"),
+        ]:
+            rb = QRadioButton(label)
+            rb.setProperty("value", val)
+            rb.setToolTip(tip)
+            rb.setStyleSheet("color:#c0cad8;font-size:11px;spacing:5px;")
+            if val == "auto":
+                rb.setChecked(True)
+            self._pk_bg.addButton(rb)
+            strat_row.addWidget(rb)
+        strat_row.addStretch()
+
+        # Kolom PK (visible hanya jika strategy = column)
+        self._pk_col_cb = QComboBox()
+        self._pk_col_cb.setFixedHeight(30)
+        self._pk_col_cb.setMinimumWidth(200)
+        self._pk_col_cb.setEnabled(False)
+        self._pk_col_cb.setPlaceholderText("(klik Preview untuk load kolom)")
+
+        pk_col_hint = QLabel("Pilih kolom yang nilainya unik dan tidak null.")
+        pk_col_hint.setStyleSheet("color:#4a5570;font-size:10px;")
+
+        def _on_pk_strategy_changed():
+            is_col = any(
+                b.isChecked() and b.property("value") == "column"
+                for b in self._pk_bg.buttons()
+            )
+            self._pk_col_cb.setEnabled(is_col)
+
+        for b in self._pk_bg.buttons():
+            b.toggled.connect(lambda _: _on_pk_strategy_changed())
+
+        form.addRow(self._lbl("Strategi PK:"), self._radio_widget(strat_row))
+        form.addRow(self._lbl("Kolom PK:"), self._pk_col_cb)
+        form.addRow("", pk_col_hint)
+        layout.addWidget(grp)
+
     def _build_csv_section(self, layout):
-        self._csv_grp = self._section("④ Opsi CSV / Teks Koordinat")
+        self._csv_grp = self._section("⑤ Opsi CSV / Teks Koordinat")
         self._csv_grp.setVisible(False)
         form = QFormLayout(self._csv_grp)
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        # ── Non-spatial toggle ────────────────────────────────────────────────
+        self._non_spatial_cb = QCheckBox(
+            "📋  Import sebagai tabel atribut biasa (CSV tanpa geometri)")
+        self._non_spatial_cb.setStyleSheet(
+            "color:#c0cad8;font-size:12px;font-weight:600;padding:2px 0;")
+        self._non_spatial_cb.setToolTip(
+            "Centang jika CSV tidak memiliki kolom koordinat.\n"
+            "Data akan disimpan sebagai tabel PostgreSQL biasa (non-spasial).")
+        self._non_spatial_cb.toggled.connect(self._on_non_spatial_toggled)
+        form.addRow("", self._non_spatial_cb)
+
+        # Separator visual
+        sep_lbl = QLabel("─── Jika CSV memiliki kolom koordinat ───────────────")
+        sep_lbl.setStyleSheet("color:#3d4455;font-size:10px;padding:4px 0;")
+        form.addRow("", sep_lbl)
+        self._csv_coord_sep = sep_lbl
 
         self._lon_col_edit  = QLineEdit()
         self._lon_col_edit.setPlaceholderText("Nama kolom Longitude / X  (auto-detect)")
@@ -373,8 +455,10 @@ class ImportDialog(QDialog):
         self._enc_cb.setFixedWidth(140)
         self._enc_cb.addItems(["utf-8", "utf-8-sig", "latin-1", "cp1252", "ascii"])
 
-        form.addRow(self._lbl("Kolom Longitude:"), self._lon_col_edit)
-        form.addRow(self._lbl("Kolom Latitude:"), self._lat_col_edit)
+        self._lon_row_lbl = self._lbl("Kolom Longitude:")
+        self._lat_row_lbl = self._lbl("Kolom Latitude:")
+        form.addRow(self._lon_row_lbl, self._lon_col_edit)
+        form.addRow(self._lat_row_lbl, self._lat_col_edit)
         form.addRow(self._lbl("Delimiter:"), self._delim_cb)
         form.addRow(self._lbl("Encoding:"), self._enc_cb)
 
@@ -382,10 +466,38 @@ class ImportDialog(QDialog):
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#6a7590;font-size:10px;padding:4px 0;")
         form.addRow("", hint)
+        self._csv_coord_hint = hint
         layout.addWidget(self._csv_grp)
 
+    def _on_non_spatial_toggled(self, checked: bool):
+        """Sembunyikan/tampilkan widget koordinat berdasarkan pilihan."""
+        show_coord = not checked
+        self._lon_col_edit.setVisible(show_coord)
+        self._lat_col_edit.setVisible(show_coord)
+        self._lon_row_lbl.setVisible(show_coord)
+        self._lat_row_lbl.setVisible(show_coord)
+        self._csv_coord_sep.setVisible(show_coord)
+        self._csv_coord_hint.setVisible(show_coord)
+        if checked:
+            self._detected_crs_lbl.setText("(tidak diperlukan — non-spasial)")
+            self._detected_crs_lbl.setStyleSheet("color:#6a7590;font-size:11px;")
+            # Mode non-spatial: file sudah dipilih → langsung enable Import
+            # tanpa perlu Preview dulu (pandas bisa baca langsung saat import)
+            if self._file_path is not None:
+                self._import_btn.setEnabled(True)
+                self._preview_info.setText(
+                    "✅ Mode non-spasial — klik Preview untuk melihat data, "
+                    "atau langsung klik Import ke PostGIS")
+                self._preview_info.setStyleSheet("color:#1e9e6a;font-size:11px;")
+        else:
+            # Kembali ke mode spasial — butuh Preview dulu
+            if self._file_path is not None:
+                self._import_btn.setEnabled(False)
+                self._preview_info.setText("Klik 'Preview' untuk melihat data")
+                self._preview_info.setStyleSheet("color:#6a7590;font-size:11px;")
+
     def _build_preview_section(self, layout):
-        grp = self._section("⑤ Preview Data  (10 baris pertama)")
+        grp = self._section("⑥ Preview Data  (10 baris pertama)")
         gl = QVBoxLayout(grp)
 
         # Info bar
@@ -565,6 +677,14 @@ class ImportDialog(QDialog):
         delim_map = {0: ",", 1: ";", 2: "\t", 3: " "}
         delim = delim_map.get(self._delim_cb.currentIndex(), ",")
 
+        # PK strategy
+        pk_strategy = "auto"
+        for btn in self._pk_bg.buttons():
+            if btn.isChecked():
+                pk_strategy = btn.property("value")
+                break
+        pk_col_name = self._pk_col_cb.currentText() if pk_strategy == "column" else ""
+
         return ImportSpec(
             file_path=self._file_path,
             target_schema=self._schema_cb.currentText().strip() or "public",
@@ -577,6 +697,8 @@ class ImportDialog(QDialog):
             source_srid=self._src_srid_spin.value() if self._src_srid_cb.isChecked() else None,
             reproject_to=COMMON_SRID.get(self._repr_combo.currentText()) if self._repr_cb.isChecked() else None,
             geom_col_name=self._geom_col_edit.text().strip() or "geom",
+            pk_strategy=pk_strategy,
+            pk_col_name=pk_col_name,
         )
 
     # ── Preview ───────────────────────────────────────────────────────────────
@@ -592,9 +714,74 @@ class ImportDialog(QDialog):
         self._status_lbl.setText("⏳ Membaca file…")
         QApplication.processEvents()
 
+        # Route: non-spatial CSV pakai pandas langsung (tidak butuh lon/lat)
+        if self._is_non_spatial_csv():
+            self._do_preview_non_spatial(spec)
+            return
+
         self._preview_worker = _PreviewWorker(self._svc, spec)
         self._preview_worker.done.connect(self._on_preview_done)
         self._preview_worker.start()
+
+    def _do_preview_non_spatial(self, spec):
+        """Preview CSV non-spasial dengan pandas — tidak butuh lon/lat."""
+        import pandas as pd
+        try:
+            delim_map = {0: ",", 1: ";", 2: "\t", 3: " "}
+            delim = delim_map.get(self._delim_cb.currentIndex(), ",")
+            df = pd.read_csv(
+                str(spec.file_path),
+                sep=delim,
+                encoding=self._enc_cb.currentText() or "utf-8",
+                nrows=10,
+                low_memory=False,
+            )
+        except UnicodeDecodeError:
+            try:
+                df = pd.read_csv(str(spec.file_path), sep=delim,
+                                 encoding="latin-1", nrows=10)
+            except Exception as exc:
+                self._on_preview_non_spatial_done(None, str(exc))
+                return
+        except Exception as exc:
+            self._on_preview_non_spatial_done(None, str(exc))
+            return
+
+        info = (f"{len(df)} baris (preview 10)  ·  "
+                f"{len(df.columns)} kolom  ·  non-spasial")
+        self._on_preview_non_spatial_done(df, info)
+
+    def _on_preview_non_spatial_done(self, df, msg: str):
+        """Tampilkan hasil preview CSV non-spasial."""
+        self._preview_progress.setVisible(False)
+        self._preview_btn.setEnabled(True)
+
+        if df is None:
+            self._preview_info.setText(f"❌ {msg}")
+            self._preview_info.setStyleSheet("color:#e03c4a;font-size:11px;")
+            self._status_lbl.setText("Preview gagal")
+            return
+
+        self._preview_info.setText(f"✅ {msg}")
+        self._preview_info.setStyleSheet("color:#1e9e6a;font-size:11px;")
+        self._status_lbl.setText("Data berhasil dibaca")
+        self._import_btn.setEnabled(True)
+
+        # Isi tabel preview
+        cols = list(df.columns)
+        self._preview_table.setColumnCount(len(cols))
+        self._preview_table.setHorizontalHeaderLabels(cols)
+        self._preview_table.setRowCount(len(df))
+        for r, row in df.iterrows():
+            for c, val in enumerate(row):
+                text = "" if val is None or (hasattr(val, "__class__") and
+                       val.__class__.__name__ == "float" and
+                       __import__("math").isnan(val)) else str(val)[:120]
+                item = QTableWidgetItem(text)
+                if not text:
+                    item.setForeground(QColor("#4a5570"))
+                self._preview_table.setItem(r, c, item)
+        self._preview_table.resizeColumnsToContents()
 
     def _on_preview_done(self, gdf, msg: str):
         self._preview_progress.setVisible(False)
@@ -622,6 +809,21 @@ class ImportDialog(QDialog):
             self._detected_crs_lbl.setText("Tidak terdeteksi — set manual di bagian override")
             self._detected_crs_lbl.setStyleSheet("color:#e89020;font-size:11px;")
 
+        # Populate dropdown kolom PK dengan kolom non-geometri dari preview
+        non_geom_cols = [
+            c for c in gdf.columns
+            if c != gdf.geometry.name and str(gdf[c].dtype) != 'geometry'
+        ]
+        self._pk_col_cb.clear()
+        self._pk_col_cb.addItems(non_geom_cols)
+        # Auto-select kolom yang mirip PK (gid, id, fid, dll.)
+        pk_hints = ("gid", "id", "fid", "ogc_fid", "objectid")
+        for hint in pk_hints:
+            for col in non_geom_cols:
+                if col.lower() == hint:
+                    self._pk_col_cb.setCurrentText(col)
+                    break
+
         # Populate table
         cols = list(gdf.columns)
         self._preview_table.setColumnCount(len(cols))
@@ -639,6 +841,12 @@ class ImportDialog(QDialog):
         self._preview_table.resizeColumnsToContents()
 
     # ── Import ────────────────────────────────────────────────────────────────
+
+    def _is_non_spatial_csv(self) -> bool:
+        """True jika file adalah CSV dan mode non-spasial dipilih."""
+        return (hasattr(self, "_non_spatial_cb")
+                and self._non_spatial_cb.isVisible()
+                and self._non_spatial_cb.isChecked())
 
     def _do_import(self):
         spec = self._build_spec()
@@ -663,13 +871,22 @@ class ImportDialog(QDialog):
         self._import_btn.setEnabled(False)
         self._preview_btn.setEnabled(False)
         self._import_progress.setVisible(True)
-        self._status_lbl.setText(
-            f"⏳ Mengimport {self._file_path.name} → PostGIS…"
-        )
-        QApplication.processEvents()
 
-        self._import_worker = _ImportWorker(self._svc, spec)
-        self._import_worker.done.connect(self._on_import_done)
+        # ── Route: non-spatial CSV vs spatial ────────────────────────────────
+        if self._is_non_spatial_csv():
+            self._status_lbl.setText(
+                f"⏳ Mengimport {self._file_path.name} sebagai tabel atribut…"
+            )
+            QApplication.processEvents()
+            self._import_worker = _NonSpatialImportWorker(self._svc, spec)
+            self._import_worker.done.connect(self._on_non_spatial_import_done)
+        else:
+            self._status_lbl.setText(
+                f"⏳ Mengimport {self._file_path.name} → PostGIS…"
+            )
+            QApplication.processEvents()
+            self._import_worker = _ImportWorker(self._svc, spec)
+            self._import_worker.done.connect(self._on_import_done)
         self._import_worker.start()
 
     def _on_import_done(self, result: ImportResult):
@@ -701,6 +918,48 @@ class ImportDialog(QDialog):
             )
             self.import_done.emit(result)
 
+        else:
+            self._status_lbl.setText("❌ Import gagal")
+            QMessageBox.critical(self, "Import Gagal", result.message)
+
+    def _on_non_spatial_import_done(self, result):
+        """Callback setelah import CSV non-spasial selesai."""
+        self._import_progress.setVisible(False)
+        self._import_btn.setEnabled(True)
+        self._preview_btn.setEnabled(True)
+
+        if result.success:
+            if result.has_warnings:
+                self._warn_lbl.setText(
+                    "⚠️ Peringatan:\n" + "\n".join(f"• {w}" for w in result.warnings)
+                )
+                self._warn_lbl.setVisible(True)
+
+            self._status_lbl.setText(f"✅ {result.rows_imported:,} baris berhasil diimport")
+
+            QMessageBox.information(
+                self, "Import Berhasil",
+                f"✅ {result.message}\n\n"
+                f"Schema : {result.schema}\n"
+                f"Tabel  : {result.table}\n"
+                f"Kolom  : {len(result.columns)}\n"
+                f"Baris  : {result.rows_imported:,}\n\n"
+                "ℹ️  Tabel non-spasial muncul di Layer Panel (ikon 📋).\n"
+                "Klik dua kali untuk melihat dan mengedit data atribut."
+            )
+            # Emit sebagai ImportResult dummy agar MainWindow tetap bisa refresh
+            from core.importers.base import ImportResult as _IR
+            dummy = _IR(
+                success=True,
+                message=result.message,
+                rows_imported=result.rows_imported,
+                schema=result.schema,
+                table=result.table,
+                geom_type="(non-spasial)",
+                srid=0,
+                columns=result.columns,
+            )
+            self.import_done.emit(dummy)
         else:
             self._status_lbl.setText("❌ Import gagal")
             QMessageBox.critical(self, "Import Gagal", result.message)

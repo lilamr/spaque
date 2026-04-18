@@ -35,13 +35,14 @@ class PostGISDatabase:
                 gc.f_geometry_column AS geom_col,
                 gc.type             AS geom_type,
                 gc.srid,
-                (
-                    SELECT COUNT(*)
-                    FROM information_schema.columns c
-                    WHERE c.table_schema = gc.f_table_schema
-                      AND c.table_name   = gc.f_table_name
-                ) AS col_count
+                col_count
             FROM geometry_columns gc
+            JOIN (
+                SELECT table_schema, table_name, COUNT(*) AS col_count
+                FROM information_schema.columns
+                GROUP BY table_schema, table_name
+            ) cnt ON cnt.table_schema = gc.f_table_schema
+                 AND cnt.table_name = gc.f_table_name
             ORDER BY gc.f_table_schema, gc.f_table_name
         """
         cur = self._conn.cursor(dict_cursor=True)
@@ -63,6 +64,63 @@ class PostGISDatabase:
             for r in rows
         ]
 
+    def list_all_tables(self, schemas: Optional[List[str]] = None) -> List[LayerInfo]:
+        """
+        Return all user tables including non-spatial tables.
+        Spatial tables include geometry metadata; non-spatial tables have empty geom_col/geom_type.
+        """
+        schema_filter = ""
+        params: List = []
+        if schemas:
+            placeholders = ",".join(["%s"] * len(schemas))
+            schema_filter = f"AND table_schema IN ({placeholders})"
+            params = schemas
+
+        sql = f"""
+            SELECT
+                c.table_schema AS schema,
+                c.table_name,
+                (
+                    SELECT COUNT(*)
+                    FROM information_schema.columns c2
+                    WHERE c2.table_schema = c.table_schema
+                      AND c2.table_name   = c.table_name
+                ) AS col_count
+            FROM information_schema.tables t
+            JOIN information_schema.columns c
+              ON c.table_schema = t.table_schema
+              AND c.table_name   = t.table_name
+            WHERE t.table_type = 'BASE TABLE'
+              AND t.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'topology')
+              {schema_filter}
+            GROUP BY c.table_schema, c.table_name, t.table_type
+            ORDER BY c.table_schema, c.table_name
+        """
+        cur = self._conn.cursor(dict_cursor=True)
+        try:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        finally:
+            cur.close()
+
+        spatial_layers = {r.qualified_name: r for r in self.list_spatial_layers()}
+
+        result: List[LayerInfo] = []
+        for r in rows:
+            qname = f'"{r["schema"]}"."{r["table_name"]}"'
+            if qname in spatial_layers:
+                result.append(spatial_layers[qname])
+            else:
+                result.append(LayerInfo(
+                    schema=r["schema"],
+                    table_name=r["table_name"],
+                    geom_col="",
+                    geom_type="",
+                    srid=0,
+                    col_count=r["col_count"],
+                ))
+        return result
+
     def get_layer_columns(self, layer: LayerInfo) -> List[LayerColumn]:
         sql = """
             SELECT column_name, data_type, udt_name
@@ -80,9 +138,13 @@ class PostGISDatabase:
                 for r in rows]
 
     def get_row_count(self, layer: LayerInfo) -> int:
+        import psycopg2.sql as sql
         cur = self._conn.cursor()
         try:
-            cur.execute(f"SELECT COUNT(*) FROM {layer.qualified_name}")
+            query = sql.SQL("SELECT COUNT(*) FROM {}").format(
+                sql.Identifier(layer.schema, layer.table_name)
+            )
+            cur.execute(query)
             return cur.fetchone()[0]
         finally:
             cur.close()
@@ -121,11 +183,23 @@ class PostGISDatabase:
             return None
 
     def fetch_raw(self, sql: str) -> Tuple[List[str], List[tuple]]:
-        """Execute SQL and return (column_names, rows)."""
+        """Execute validated SQL and return (column_names, rows)."""
         self._conn.ensure_connection()
         cur = self._conn.cursor()
         try:
             cur.execute(sql)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            rows = cur.fetchall()
+            return cols, rows
+        finally:
+            cur.close()
+
+    def fetch_raw_safe(self, sql: str, params: tuple = ()) -> Tuple[List[str], List[tuple]]:
+        """Execute parameterized SQL and return (column_names, rows)."""
+        self._conn.ensure_connection()
+        cur = self._conn.cursor()
+        try:
+            cur.execute(sql, params)
             cols = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall()
             return cols, rows

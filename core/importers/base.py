@@ -1,6 +1,9 @@
 """
 core/importers/base.py
 Spatial file import pipeline: read file → validate → push to PostGIS.
+
+v1.2.0: tambah NonSpatialImportResult + SpatialImporter.run_non_spatial()
+        untuk import CSV tanpa kolom geometri ke PostgreSQL biasa.
 """
 
 from __future__ import annotations
@@ -18,14 +21,14 @@ from utils.logger import get_logger
 logger = get_logger("spaque.importers")
 
 
-# ── Import spec (options chosen by user in dialog) ────────────────────────────
+# ── Import spec ────────────────────────────────────────────────────────────────
 
 @dataclass
 class ImportSpec:
     """Everything the user configured in the Import dialog."""
     file_path: Path
     target_schema: str = "public"
-    target_table: str = ""           # auto-derived from filename if empty
+    target_table: str = ""
     target_srid: int = 4326
     if_exists: str = "fail"          # "fail" | "replace" | "append"
     # CSV-specific
@@ -34,12 +37,17 @@ class ImportSpec:
     csv_delimiter: str = ","
     csv_encoding: str = "utf-8"
     # Reprojection
-    source_srid: Optional[int] = None   # override auto-detected CRS
-    reproject_to: Optional[int] = None  # reproject before import
+    source_srid: Optional[int] = None
+    reproject_to: Optional[int] = None
     # Column options
     drop_cols: List[str] = field(default_factory=list)
-    # Geometry column name in PostGIS
     geom_col_name: str = "geom"
+    # Primary Key options
+    # pk_strategy: "auto"   → buat kolom _gid SERIAL PRIMARY KEY otomatis
+    #              "column" → jadikan kolom yang ada sebagai PK
+    #              "none"   → tidak buat PK (tidak disarankan untuk edit)
+    pk_strategy: str = "auto"   # "auto" | "column" | "none"
+    pk_col_name: str = ""       # nama kolom yang dijadikan PK (jika strategy=column)
 
     @property
     def resolved_table(self) -> str:
@@ -69,15 +77,34 @@ class ImportResult:
         return bool(self.warnings)
 
 
+@dataclass
+class NonSpatialImportResult:
+    """
+    Result untuk import CSV tanpa kolom geometri (v1.2.0).
+    Data disimpan sebagai tabel PostgreSQL biasa (bukan PostGIS layer).
+    """
+    success: bool
+    message: str
+    rows_imported: int = 0
+    schema: str = ""
+    table: str = ""
+    columns: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+
+    @property
+    def has_warnings(self) -> bool:
+        return bool(self.warnings)
+
+
 # ── Format registry ───────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class FormatInfo:
     label: str
     extensions: Tuple[str, ...]
-    driver: Optional[str]          # fiona driver name, None = special handling
+    driver: Optional[str]
     icon: str
-    supports_crs: bool = True      # False for CSV (CRS must be set manually)
+    supports_crs: bool = True
     is_csv_like: bool = False
 
 
@@ -118,18 +145,17 @@ class SpatialImporter:
     """
     Reads any supported spatial file into a GeoDataFrame,
     then writes it into PostGIS using to_postgis().
+
+    v1.2.0: tambah run_non_spatial() untuk CSV tanpa geometri.
     """
 
     def __init__(self, db_connection):
-        self._conn = db_connection   # DatabaseConnection instance
+        self._conn = db_connection
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def preview(self, spec: ImportSpec) -> Tuple[Optional[gpd.GeoDataFrame], str]:
-        """
-        Read file and return (gdf_sample_10rows, info_message).
-        Does NOT write to database. Used for the preview panel.
-        """
+        """Read file and return (gdf_sample_10rows, info_message)."""
         try:
             gdf = self._read_file(spec)
             if gdf is None or len(gdf) == 0:
@@ -148,10 +174,9 @@ class SpatialImporter:
 
     def run(self, spec: ImportSpec) -> ImportResult:
         """Full import: read → validate → reproject → write to PostGIS."""
-        table = spec.resolved_table
+        table    = spec.resolved_table
         warnings: List[str] = []
 
-        # 1. Read file
         try:
             gdf = self._read_file(spec)
         except Exception as exc:
@@ -160,49 +185,39 @@ class SpatialImporter:
         if gdf is None or len(gdf) == 0:
             return ImportResult(False, "File tidak mengandung data atau geometri")
 
-        # 2. Validate geometry
         gdf, geom_warn = self._fix_geometry(gdf)
         warnings.extend(geom_warn)
 
-        # 3. Apply source CRS override
         if spec.source_srid and (gdf.crs is None):
             try:
                 gdf = gdf.set_crs(spec.source_srid)
-                logger.info("Applied source CRS: EPSG:%d", spec.source_srid)
             except Exception as exc:
                 warnings.append(f"Tidak bisa set CRS: {exc}")
 
-        # 4. Reproject if requested
         if spec.reproject_to and gdf.crs:
             try:
                 gdf = gdf.to_crs(spec.reproject_to)
-                logger.info("Reprojected to EPSG:%d", spec.reproject_to)
             except Exception as exc:
                 warnings.append(f"Reproject gagal: {exc}")
 
-        # 5. Set target SRID from CRS or fallback
         srid = spec.target_srid
         if gdf.crs:
             epsg = gdf.crs.to_epsg()
             if epsg:
                 srid = epsg
 
-        # 6. Drop requested columns
         if spec.drop_cols:
             cols_to_drop = [c for c in spec.drop_cols if c in gdf.columns]
             gdf = gdf.drop(columns=cols_to_drop)
 
-        # 7. Rename geometry column
         if gdf.geometry.name != spec.geom_col_name:
             gdf = gdf.rename_geometry(spec.geom_col_name)
 
-        # 8. Sanitize column names (PostgreSQL safe)
         gdf.columns = [_safe_ident(c) if c != spec.geom_col_name else c
                        for c in gdf.columns]
 
-        # 9. Write to PostGIS
         try:
-            engine = self._conn.sqlalchemy_engine()
+            engine    = self._conn.sqlalchemy_engine()
             row_count = len(gdf)
 
             gdf.to_postgis(
@@ -215,7 +230,13 @@ class SpatialImporter:
             )
 
             geom_type = gdf.geometry.geom_type.unique()[0]
-            cols = list(gdf.columns)
+            cols      = list(gdf.columns)
+
+            # Terapkan Primary Key sesuai strategy
+            try:
+                self._apply_pk(spec, table, warnings)
+            except Exception as pk_exc:
+                warnings.append(f"PK tidak bisa dibuat: {pk_exc}")
 
             logger.info(
                 "Import OK: %d rows → %s.%s (EPSG:%d, %s)",
@@ -239,6 +260,129 @@ class SpatialImporter:
             return ImportResult(False, f"Gagal menulis ke PostGIS: {exc}",
                                 warnings=warnings)
 
+    def run_non_spatial(self, spec: ImportSpec) -> NonSpatialImportResult:
+        """
+        Import CSV tanpa kolom geometri ke PostgreSQL sebagai tabel biasa.
+        Tidak membutuhkan PostGIS — cukup SQLAlchemy + psycopg2.
+        Cocok untuk tabel referensi, lookup, atau data tabular murni.
+        """
+        table    = spec.resolved_table
+        schema   = spec.target_schema
+        warnings: List[str] = []
+
+        # Baca CSV
+        try:
+            delim = spec.csv_delimiter or ","
+            df = pd.read_csv(
+                str(spec.file_path),
+                sep=delim,
+                encoding=spec.csv_encoding or "utf-8",
+                low_memory=False,
+            )
+        except UnicodeDecodeError:
+            # Fallback encoding
+            try:
+                df = pd.read_csv(str(spec.file_path), sep=spec.csv_delimiter or ",",
+                                 encoding="latin-1", low_memory=False)
+                warnings.append("Encoding UTF-8 gagal, fallback ke latin-1")
+            except Exception as exc:
+                return NonSpatialImportResult(False, f"Gagal membaca CSV: {exc}")
+        except Exception as exc:
+            return NonSpatialImportResult(False, f"Gagal membaca CSV: {exc}")
+
+        if df.empty:
+            return NonSpatialImportResult(False, "File CSV kosong atau tidak ada data")
+
+        # Drop kolom yang diminta
+        if spec.drop_cols:
+            cols_to_drop = [c for c in spec.drop_cols if c in df.columns]
+            if cols_to_drop:
+                df = df.drop(columns=cols_to_drop)
+
+        # Sanitasi nama kolom → PostgreSQL safe
+        df.columns = [_safe_ident(c) for c in df.columns]
+
+        # Tulis ke PostgreSQL
+        try:
+            engine = self._conn.sqlalchemy_engine()
+            df.to_sql(
+                name=table,
+                con=engine,
+                schema=schema,
+                if_exists=spec.if_exists,
+                index=False,
+                chunksize=500,
+            )
+            cols = list(df.columns)
+
+            # Terapkan Primary Key sesuai strategy (sama dengan import spasial)
+            try:
+                self._apply_pk(spec, table, warnings)
+            except Exception as pk_exc:
+                warnings.append(f"PK tidak bisa dibuat: {pk_exc}")
+
+            msg  = (f"Berhasil import {len(df):,} baris ke "
+                    f'"{schema}"."{table}" (non-spasial)')
+            logger.info(msg)
+            return NonSpatialImportResult(
+                success=True,
+                message=msg,
+                rows_imported=len(df),
+                schema=schema,
+                table=table,
+                columns=cols,
+                warnings=warnings,
+            )
+        except Exception as exc:
+            logger.error("Non-spatial write failed: %s", exc)
+            return NonSpatialImportResult(
+                False,
+                f"Gagal menulis ke database: {exc}",
+                warnings=warnings,
+            )
+
+    # ── PK helper ─────────────────────────────────────────────────────────────
+
+    def _apply_pk(self, spec: 'ImportSpec', table: str, warnings: list):
+        """Terapkan primary key ke tabel yang baru diimport."""
+        target = f'"{spec.target_schema}"."{table}"'
+        cur = self._conn.cursor()
+        try:
+            if spec.pk_strategy == "auto":
+                # Cek apakah kolom _gid sudah ada (dari file asli)
+                cur.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s
+                      AND column_name = '_gid'
+                """, (spec.target_schema, table))
+                if not cur.fetchone():
+                    cur.execute(
+                        f'ALTER TABLE {target} ADD COLUMN _gid SERIAL PRIMARY KEY'
+                    )
+                else:
+                    # Kolom sudah ada, jadikan PK
+                    cur.execute(
+                        f'ALTER TABLE {target} ADD PRIMARY KEY (_gid)'
+                    )
+                self._conn.commit()
+
+            elif spec.pk_strategy == "column" and spec.pk_col_name:
+                safe_col = spec.pk_col_name.strip('"')
+                cur.execute(
+                    f'ALTER TABLE {target} ADD PRIMARY KEY ("{safe_col}")'
+                )
+                self._conn.commit()
+
+            # strategy == "none": tidak buat PK
+        except Exception as exc:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+            raise exc
+        finally:
+            cur.close()
+
     # ── File readers ──────────────────────────────────────────────────────────
 
     def _read_file(self, spec: ImportSpec) -> Optional[gpd.GeoDataFrame]:
@@ -249,20 +393,16 @@ class SpatialImporter:
         if fmt and fmt.is_csv_like:
             return self._read_csv(spec)
 
-        # GeoDataFrame.read_file handles everything fiona supports
         kwargs: Dict[str, Any] = {}
 
-        # KMZ → need to handle zipped KML
         if ext == ".kmz":
             return self._read_kmz(path)
 
-        # GDB → directory, open with fiona
         if ext == ".gdb":
             import fiona
             layers = fiona.listlayers(str(path))
             if not layers:
                 raise ValueError("FileGDB tidak mengandung layer")
-            # Import all layers merged, or just first
             gdfs = []
             for lyr in layers:
                 g = gpd.read_file(str(path), layer=lyr)
@@ -271,7 +411,6 @@ class SpatialImporter:
                 return gdfs[0]
             return pd.concat(gdfs, ignore_index=True)
 
-        # Everything else
         return gpd.read_file(str(path), **kwargs)
 
     def _read_csv(self, spec: ImportSpec) -> Optional[gpd.GeoDataFrame]:
@@ -284,7 +423,6 @@ class SpatialImporter:
         )
 
         if not spec.lon_col or not spec.lat_col:
-            # Try to auto-detect
             lon_col = _auto_detect_col(df.columns, ["lon","long","longitude","x","bujur"])
             lat_col = _auto_detect_col(df.columns, ["lat","latitude","y","lintang"])
             if not lon_col or not lat_col:
@@ -296,7 +434,6 @@ class SpatialImporter:
             lon_col = spec.lon_col
             lat_col = spec.lat_col
 
-        # Convert to numeric
         df[lon_col] = pd.to_numeric(df[lon_col], errors="coerce")
         df[lat_col] = pd.to_numeric(df[lat_col], errors="coerce")
         df = df.dropna(subset=[lon_col, lat_col])
@@ -327,14 +464,12 @@ class SpatialImporter:
         warnings: List[str] = []
         original = len(gdf)
 
-        # Drop null geometry
         gdf = gdf[~gdf.geometry.isna()].copy()
         dropped_null = original - len(gdf)
         if dropped_null:
             warnings.append(f"{dropped_null} fitur dengan geometri null dihapus")
 
-        # Fix invalid geometries with buffer(0) trick
-        invalid_mask = ~gdf.geometry.is_valid
+        invalid_mask  = ~gdf.geometry.is_valid
         invalid_count = invalid_mask.sum()
         if invalid_count:
             gdf.loc[invalid_mask, gdf.geometry.name] = (
@@ -368,13 +503,13 @@ def _auto_detect_col(columns, candidates: List[str]) -> Optional[str]:
 
 def get_file_info(path: Path) -> Dict[str, Any]:
     """Quick file metadata without full read."""
-    fmt = SUPPORTED_EXTENSIONS.get(path.suffix.lower())
+    fmt     = SUPPORTED_EXTENSIONS.get(path.suffix.lower())
     size_mb = path.stat().st_size / 1_048_576 if path.exists() else 0
     return {
-        "name": path.name,
-        "format": fmt.label if fmt else "Unknown",
-        "icon": fmt.icon if fmt else "📁",
-        "size_mb": size_mb,
-        "is_csv": fmt.is_csv_like if fmt else False,
+        "name":      path.name,
+        "format":    fmt.label if fmt else "Unknown",
+        "icon":      fmt.icon if fmt else "📁",
+        "size_mb":   size_mb,
+        "is_csv":    fmt.is_csv_like if fmt else False,
         "supported": fmt is not None,
     }

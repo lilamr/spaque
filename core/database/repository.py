@@ -17,7 +17,7 @@ logger = get_logger("spaque.db.repository")
 
 class LayerRepository:
     """
-    High-level data access object for spatial layers.
+    High-level data access object for spatial and non-spatial layers.
     Delegates to PostGISDatabase; adds caching.
     """
 
@@ -25,10 +25,11 @@ class LayerRepository:
         self._postgis = postgis
         self._layer_cache: List[LayerInfo] = []
         self._column_cache: dict = {}   # qualified_name -> List[LayerColumn]
+        self._row_count_cache: dict = {}   # qualified_name -> int
 
     def all_layers(self, refresh: bool = False) -> List[LayerInfo]:
         if not self._layer_cache or refresh:
-            self._layer_cache = self._postgis.list_spatial_layers()
+            self._layer_cache = self._postgis.list_all_tables()
             self._column_cache.clear()
         return self._layer_cache
 
@@ -39,8 +40,11 @@ class LayerRepository:
             self._column_cache[key] = self._postgis.get_layer_columns(layer)
         return self._column_cache[key]
 
-    def row_count(self, layer: LayerInfo) -> int:
-        return self._postgis.get_row_count(layer)
+    def row_count(self, layer: LayerInfo, refresh: bool = False) -> int:
+        key = layer.qualified_name
+        if key not in self._row_count_cache or refresh:
+            self._row_count_cache[key] = self._postgis.get_row_count(layer)
+        return self._row_count_cache[key]
 
     def load_geodataframe(self, layer: LayerInfo,
                           limit: int = 5000) -> Optional[gpd.GeoDataFrame]:
@@ -48,18 +52,26 @@ class LayerRepository:
         return self._postgis.fetch_geodataframe(sql, geom_col=layer.geom_col)
 
     def execute_sql(self, sql: str,
-                    geom_col: Optional[str] = None
+                    geom_col: Optional[str] = None,
+                    params: tuple = (),
+                    row_limit: Optional[int] = 5000
                     ) -> Tuple[Optional[gpd.GeoDataFrame], List[str], List[tuple]]:
         """
-        Smart execution: tries GeoDataFrame first, falls back to raw rows.
-        Returns (gdf_or_None, columns, rows).
+        Execute parameterized SQL query. Returns (gdf_or_None, columns, rows).
+        Only SELECT statements are allowed.
+        row_limit: None = unlimited rows, default 5000.
         """
+        sql_stripped = sql.strip().upper()
+        if not sql_stripped.startswith("SELECT"):
+            raise ValueError("execute_sql() only accepts SELECT statements")
         gdf = self._postgis.fetch_geodataframe(sql, geom_col)
         if gdf is not None:
             cols = list(gdf.columns)
-            rows = gdf.head(5000).values.tolist()
+            if row_limit is not None:
+                rows = gdf.head(row_limit).values.tolist()
+            else:
+                rows = gdf.values.tolist()
             return gdf, cols, rows
-        # Fallback
         cols, rows = self._postgis.fetch_raw(sql)
         return None, cols, rows
 
@@ -70,3 +82,4 @@ class LayerRepository:
     def invalidate_cache(self):
         self._layer_cache.clear()
         self._column_cache.clear()
+        self._row_count_cache.clear()

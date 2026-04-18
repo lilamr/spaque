@@ -6,7 +6,7 @@ Wires all panels, dialogs, services, and workers together.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Dict, Optional, List
 
 import geopandas as gpd
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -38,6 +38,7 @@ from dialogs.geoprocess_dialog import GeoprocessDialog
 from dialogs.query_builder_dialog import QueryBuilderDialog
 from dialogs.import_dialog import ImportDialog
 from dialogs.pipeline_dialog import PipelineDialog
+from dialogs.attribute_table_dialog import AttributeTableDialog
 from dialogs.project_dialog import (
     ProjectPropertiesDialog, RecentProjectsDialog, ask_save_changes
 )
@@ -257,11 +258,13 @@ class MainWindow(QMainWindow):
 
         # Help
         m = mb.addMenu("&Bantuan")
-        self._act(m, "📖  Panduan Lengkap…",       lambda: open_help(self),                     "F1")
-        self._act(m, "🔍  Panduan Query Builder…",  lambda: open_help(self, "🔍  Query Builder"), "")
-        self._act(m, "⚙  Panduan Geoprocessing…",  lambda: open_help(self, "⚙  Geoprocessing"), "")
-        self._act(m, "🔀  Panduan Pipeline Builder…",lambda: open_help(self, "🔀  Pipeline Builder"), "")
-        self._act(m, "⌨  Panduan SQL Console…",    lambda: open_help(self, "⌨  SQL Console"),   "")
+        self._act(m, "📖  Panduan Lengkap…",          lambda: open_help(self),                        "F1")
+        self._act(m, "📂  Panduan Import…",           lambda: open_help(self, "📂  Import File"),      "")
+        self._act(m, "📋  Panduan Tabel Atribut…",    lambda: open_help(self, "📋  Tabel Atribut"),    "")
+        self._act(m, "🔍  Panduan Query Builder…",    lambda: open_help(self, "🔍  Query Builder"),    "")
+        self._act(m, "⚙  Panduan Geoprocessing…",    lambda: open_help(self, "⚙  Geoprocessing"),    "")
+        self._act(m, "🔀  Panduan Pipeline Builder…", lambda: open_help(self, "🔀  Pipeline Builder"),"")
+        self._act(m, "⌨  Panduan SQL Console…",      lambda: open_help(self, "⌨  SQL Console"),      "")
         m.addSeparator()
         self._act(m, "ℹ  Tentang Spaque",           self._about)
 
@@ -303,6 +306,13 @@ class MainWindow(QMainWindow):
         bp = self._bottom_panel
         bp.sql_submitted.connect(lambda sql: self._run_sql(sql))
         bp.export_requested.connect(lambda: self._export("GeoJSON"))
+        bp.save_edits_requested.connect(self._save_attribute_edits)
+        bp.attr_table.open_in_window.connect(self._open_attribute_window)
+        bp.attr_table.add_column_requested.connect(self._add_column)
+        bp.attr_table.delete_column_requested.connect(self._delete_column)
+        bp.attr_table.delete_rows_requested.connect(self._delete_rows)
+        bp.attr_table.add_row_requested.connect(self._add_row_from_bottom_panel)
+        self._attr_dialogs: List[AttributeTableDialog] = []
 
     def _connect_log_handler(self):
         handler = get_qt_handler()
@@ -505,8 +515,17 @@ class MainWindow(QMainWindow):
         self._project.add_to_history(result.sql, title, result.row_count)
         self._update_title()
 
+        # Detect PK column for edit support (coba dari DB dulu)
+        pk_col = None
+        if self._current_layer:
+            pk_col = self._detect_pk_from_db(self._current_layer)
+        if not pk_col:
+            pk_col = self._detect_pk_col(result.columns)
+        geom_type = self._current_layer.geom_type if self._current_layer else ""
+        geom_col = result.gdf.geometry.name if result.gdf is not None else ""
         # Populate attribute table
-        self._bottom_panel.populate_table(result.columns, result.rows)
+        self._bottom_panel.attr_table.set_layer_name(title)
+        self._bottom_panel.populate_table(result.columns, result.rows, pk_col=pk_col, geom_type=geom_type, geom_col=geom_col)
 
         # Update map choropleth column list
         numeric_cols: List[str] = []
@@ -527,6 +546,428 @@ class MainWindow(QMainWindow):
         """Called from SQL console."""
         geom_col = self._current_layer.geom_col if self._current_layer else None
         self._run_query(sql, geom_col, title="SQL Console")
+
+    def _open_attribute_window(self, layer_name: str):
+        """Buka attribute table dalam window terpisah dengan semua baris."""
+        if not self._current_layer:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada layer aktif.")
+            return
+        layer = self._current_layer
+        result = self._query_svc.fetch_all_rows(layer.qualified_name, layer.geom_col)
+        if result.has_error:
+            QMessageBox.critical(self, "Error", result.error)
+            return
+        pk_col = self._detect_pk_from_db(layer) or self._detect_pk_col(result.columns)
+        geom_col = result.gdf.geometry.name if result.gdf is not None else layer.geom_col
+
+        dlg = AttributeTableDialog(layer_name, self)
+        dlg.save_edits_requested.connect(self._save_attribute_edits_from_dialog)
+        dlg.add_row_requested.connect(self._add_row_from_dialog)
+        dlg.add_column_requested.connect(self._add_column)
+        dlg.delete_column_requested.connect(self._delete_column)
+        dlg.delete_rows_requested.connect(self._delete_rows)
+        dlg.closed.connect(self._on_attr_window_closed)
+        self._attr_dialogs.append(dlg)
+        dlg.populate_table(
+            result.columns,
+            result.rows,
+            pk_col,
+            layer.geom_type,
+            geom_col,
+        )
+        dlg.show()
+
+    def _on_attr_window_closed(self, layer_name: str):
+        """Cleanup when attribute window is closed."""
+        for dlg in self._attr_dialogs:
+            if dlg._layer_name == layer_name:
+                self._attr_dialogs.remove(dlg)
+                break
+
+    def _detect_pk_col(self, columns) -> Optional[str]:
+        """Deteksi kolom primary key dari daftar kolom hasil query."""
+        # Urutan prioritas: kolom umum PK + _gid yang dibuat Spaque saat geoprocess
+        pk_candidates = (
+            "gid", "id", "fid", "ogc_fid", "objectid", "feat_id", "pk",
+            "_gid", "oid", "feature_id", "rowid",
+        )
+        col_lower = {c.lower(): c for c in columns}
+        for cand in pk_candidates:
+            if cand in col_lower:
+                return col_lower[cand]
+        # Fallback: coba query DB untuk cek constraint PRIMARY KEY
+        # (dilakukan di _detect_pk_from_db jika layer tersedia)
+        return None
+
+    def _detect_pk_from_db(self, layer) -> Optional[str]:
+        """Query information_schema untuk mendapatkan PK aktual dari DB."""
+        if not self._check_connected():
+            return None
+        try:
+            cur = self._db_conn.cursor()
+            cur.execute("""
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                  AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'PRIMARY KEY'
+                  AND tc.table_schema = %s
+                  AND tc.table_name  = %s
+                LIMIT 1
+            """, (layer.schema, layer.table_name))
+            row = cur.fetchone()
+            cur.close()
+            return row[0] if row else None
+        except Exception:
+            return None
+
+    def _save_attribute_edits(self, edits: dict):
+        """
+        Simpan perubahan atribut ke PostGIS via UPDATE.
+        edits = {(row_idx, col_name): new_value_str}
+        """
+        if not self._current_layer:
+            QMessageBox.warning(self, "Peringatan",
+                                "Tidak ada layer aktif untuk disimpan.")
+            return
+        if not self._check_connected():
+            return
+
+        layer  = self._current_layer
+        attr_table = self._bottom_panel.attr_table
+        pk_col = attr_table._pk_col
+
+        rows_edits: Dict[int, Dict[str, str]] = {}
+        for (row_idx, col_name), new_val in edits.items():
+            rows_edits.setdefault(row_idx, {})[col_name] = new_val
+
+        errors   = []
+        success_count = 0
+        cur = None
+        try:
+            cur = self._db_conn.cursor()
+            for row_idx, col_vals in rows_edits.items():
+                if pk_col:
+                    pk_val = attr_table.get_pk_value(row_idx)
+                    if pk_val is None:
+                        errors.append(f"Baris {row_idx}: nilai PK tidak ditemukan, dilewati")
+                        continue
+                    safe_cols = {
+                        col: val for col, val in col_vals.items()
+                        if col != pk_col and col != layer.geom_col
+                    }
+                    if not safe_cols:
+                        continue
+                    set_clause = ", ".join(f'"{col}" = %s' for col in safe_cols)
+                    vals = list(safe_cols.values()) + [pk_val]
+                    sql = (
+                        f'UPDATE {layer.qualified_name} '
+                        f'SET {set_clause} '
+                        f'WHERE "{pk_col}" = %s'
+                    )
+                    cur.execute(sql, vals)
+                    success_count += 1
+                else:
+                    safe_cols = {
+                        col: val for col, val in col_vals.items()
+                        if col != layer.geom_col
+                    }
+                    if not safe_cols:
+                        continue
+                    orig_row = attr_table._rows[row_idx] if row_idx < len(attr_table._rows) else []
+                    orig_cols = attr_table._columns
+                    where_parts = []
+                    where_vals = []
+                    for ci, col in enumerate(orig_cols):
+                        if col != layer.geom_col and col in safe_cols:
+                            where_parts.append(f'"{col}" = %s')
+                            where_vals.append(orig_row[ci] if ci < len(orig_row) else None)
+                    if not where_parts:
+                        errors.append(f"Baris {row_idx}: tidak bisa identifikasi baris")
+                        continue
+                    set_clause = ", ".join(f'"{col}" = %s' for col in safe_cols)
+                    where_clause = " AND ".join(where_parts)
+                    vals = list(safe_cols.values()) + where_vals
+                    sql = (
+                        f'UPDATE {layer.qualified_name} '
+                        f'SET {set_clause} '
+                        f'WHERE {where_clause}'
+                    )
+                    cur.execute(sql, vals)
+                    if cur.rowcount > 0:
+                        success_count += 1
+                    else:
+                        errors.append(f"Baris {row_idx}: baris tidak ditemukan atau sudah berubah")
+
+            self._db_conn.commit()
+
+        except Exception as exc:
+            try:
+                self._db_conn.rollback()
+            except Exception:
+                pass
+            logger.error("Save edits failed: %s", exc)
+            QMessageBox.critical(
+                self, "Gagal Menyimpan Perubahan",
+                f"Error saat UPDATE ke database:\n\n{exc}"
+            )
+            return
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+
+        # Tampilkan hasil
+        msg_parts = [f"✅ {success_count} baris diperbarui di {layer.full_label}"]
+        if errors:
+            msg_parts.append(f"⚠ {len(errors)} baris dilewati: " + "; ".join(errors[:3]))
+        self.statusBar().showMessage("  ".join(msg_parts))
+        logger.info("Edits saved: %d rows updated in %s", success_count, layer.full_label)
+
+        # Reset tabel edit state
+        self._bottom_panel.attr_table.mark_save_done()
+
+        # Reload data segar dari DB
+        self._load_layer(layer)
+
+    def _save_attribute_edits_from_dialog(self, dialog, edits: dict):
+        """
+        Simpan perubahan dari popup window.
+        Berbeda dari _save_attribute_edits (bottom panel):
+        sumber data diambil dari dialog, bukan self._bottom_panel.attr_table.
+        """
+        if not self._current_layer:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada layer aktif.")
+            return
+        if not self._check_connected():
+            return
+
+        layer  = self._current_layer
+        pk_col = dialog._pk_col
+
+        if not pk_col:
+            QMessageBox.warning(
+                self, "Tidak Bisa Simpan",
+                "Tabel tidak memiliki Primary Key.\n"
+                "Perubahan tidak bisa disimpan ke database.")
+            return
+
+        rows_edits: Dict[int, Dict[str, str]] = {}
+        for (global_row, col_name), new_val in edits.items():
+            rows_edits.setdefault(global_row, {})[col_name] = new_val
+
+        errors, success_count = [], 0
+        cur = None
+        try:
+            cur = self._db_conn.cursor()
+            for global_row, col_vals in rows_edits.items():
+                pk_val = dialog.get_pk_value_global(global_row)
+                if pk_val is None:
+                    errors.append(f"Baris {global_row}: PK tidak ditemukan")
+                    continue
+                safe_cols = {
+                    col: val for col, val in col_vals.items()
+                    if col != pk_col and col != layer.geom_col
+                }
+                if not safe_cols:
+                    continue
+                set_clause = ", ".join(f'"{col}" = %s' for col in safe_cols)
+                vals = list(safe_cols.values()) + [pk_val]
+                sql  = (f'UPDATE {layer.qualified_name} '
+                        f'SET {set_clause} WHERE "{pk_col}" = %s')
+                cur.execute(sql, vals)
+                success_count += 1
+            self._db_conn.commit()
+        except Exception as exc:
+            try: self._db_conn.rollback()
+            except Exception: pass
+            logger.error("Save dialog edits failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Menyimpan", f"Error:\n\n{exc}")
+            return
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+
+        msg_parts = [f"✅ {success_count} baris diperbarui di {layer.full_label}"]
+        if errors:
+            msg_parts.append(f"⚠ {len(errors)} dilewati: " + "; ".join(errors[:3]))
+        self.statusBar().showMessage("  ".join(msg_parts))
+        logger.info("Dialog edits saved: %d rows in %s", success_count, layer.full_label)
+        dialog.mark_save_done()
+        self._load_layer(layer)
+
+    def _add_row_from_dialog(self, dialog, row_data: dict):
+        """Tambah baris baru ke tabel non-spasial dari popup window."""
+        if not self._current_layer or not self._check_connected():
+            return
+        layer = self._current_layer
+        if not row_data:
+            return
+        try:
+            cols = [f'"{c}"' for c in row_data]
+            placeholders = ", ".join(["%s"] * len(row_data))
+            vals = list(row_data.values())
+            sql  = (f'INSERT INTO {layer.qualified_name} '
+                    f'({", ".join(cols)}) VALUES ({placeholders})')
+            cur = self._db_conn.cursor()
+            cur.execute(sql, vals)
+            self._db_conn.commit()
+            cur.close()
+            self.statusBar().showMessage(f"✅ Baris baru ditambahkan ke {layer.full_label}")
+            logger.info("Row added to %s", layer.full_label)
+            # Reload popup window dengan data terbaru
+            self._refresh_all_attr_windows(layer)
+            self._load_layer(layer)
+        except Exception as exc:
+            try: self._db_conn.rollback()
+            except Exception: pass
+            logger.error("Add row failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Tambah Baris", f"Error:\n\n{exc}")
+
+    def _add_row_from_bottom_panel(self, row_data: dict):
+        """Tambah baris baru dari bottom panel (non-spasial)."""
+        if not self._current_layer or not self._check_connected():
+            return
+        layer = self._current_layer
+        if not row_data:
+            return
+        try:
+            cols = [", ".join(f'"{c}"' for c in row_data)]
+            placeholders = ", ".join(["%s"] * len(row_data))
+            col_clause   = ", ".join(f'"{c}"' for c in row_data)
+            vals = list(row_data.values())
+            sql  = (f'INSERT INTO {layer.qualified_name} '
+                    f'({col_clause}) VALUES ({placeholders})')
+            cur = self._db_conn.cursor()
+            cur.execute(sql, vals)
+            self._db_conn.commit()
+            cur.close()
+            self.statusBar().showMessage(f"✅ Baris baru ditambahkan ke {layer.full_label}")
+            logger.info("Row added (bottom panel) to %s", layer.full_label)
+            self._refresh_all_attr_windows(layer)
+            self._load_layer(layer)
+        except Exception as exc:
+            try: self._db_conn.rollback()
+            except Exception: pass
+            logger.error("Add row (bottom) failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Tambah Baris", f"Error:\n\n{exc}")
+
+    def _add_column(self, col_name: str, data_type: str = "TEXT"):
+        """Tambah kolom baru ke tabel di database."""
+        if not self._check_connected():
+            return
+        layer = self._current_layer
+        if not layer:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada layer aktif.")
+            return
+        sql = f'ALTER TABLE {layer.qualified_name} ADD COLUMN "{col_name}" {data_type}'
+        try:
+            cur = self._db_conn.cursor()
+            cur.execute(sql)
+            self._db_conn.commit()
+            cur.close()
+            self.statusBar().showMessage(f"✅ Kolom '{col_name}' ({data_type}) ditambahkan")
+            if self._repo:
+                self._repo.invalidate_cache()
+            self._load_layer(layer)
+            self._refresh_all_attr_windows(layer)
+        except Exception as exc:
+            self._db_conn.rollback()
+            logger.error("Add column failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Menambah Kolom",
+                               f"Error:\n\n{exc}")
+
+    def _delete_column(self, col_name: str):
+        """Hapus kolom dari tabel di database."""
+        if not self._check_connected():
+            return
+        layer = self._current_layer
+        if not layer:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada layer aktif.")
+            return
+        sql = f'ALTER TABLE {layer.qualified_name} DROP COLUMN "{col_name}"'
+        try:
+            cur = self._db_conn.cursor()
+            cur.execute(sql)
+            self._db_conn.commit()
+            cur.close()
+            self.statusBar().showMessage(f"✅ Kolom '{col_name}' dihapus")
+            if self._repo:
+                self._repo.invalidate_cache()
+            self._load_layer(layer)
+            self._refresh_all_attr_windows(layer)
+        except Exception as exc:
+            self._db_conn.rollback()
+            logger.error("Delete column failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Menghapus Kolom",
+                               f"Error:\n\n{exc}")
+
+    def _refresh_all_attr_windows(self, layer):
+        """Setelah DDL (add/delete column), reload semua popup attribute window."""
+        if not self._attr_dialogs:
+            return
+        try:
+            result = self._query_svc.fetch_all_rows(layer.qualified_name, layer.geom_col)
+            if result.has_error:
+                return
+            pk_col   = self._detect_pk_from_db(layer) or self._detect_pk_col(result.columns)
+            geom_col = result.gdf.geometry.name if result.gdf is not None else layer.geom_col
+            for dlg in self._attr_dialogs:
+                if dlg._layer_name in (layer.table_name, layer.full_label):
+                    dlg.refresh_populate(
+                        result.columns, result.rows,
+                        pk_col, layer.geom_type, geom_col,
+                    )
+        except Exception as exc:
+            logger.warning("refresh_all_attr_windows: %s", exc)
+
+    def _delete_rows(self, pk_values: list):
+        """Hapus baris dari tabel berdasarkan PK atau row data."""
+        if not self._check_connected():
+            return
+        layer = self._current_layer
+        if not layer:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada layer aktif.")
+            return
+        attr_table = self._bottom_panel.attr_table
+        pk_col = attr_table._pk_col
+        try:
+            cur = self._db_conn.cursor()
+            deleted = 0
+            for row_idx in pk_values:
+                if pk_col:
+                    pk_val = attr_table.get_pk_value(row_idx)
+                    if pk_val is None:
+                        continue
+                    sql = f'DELETE FROM {layer.qualified_name} WHERE "{pk_col}" = %s'
+                    cur.execute(sql, (pk_val,))
+                else:
+                    orig_row = attr_table._rows[row_idx] if row_idx < len(attr_table._rows) else []
+                    orig_cols = attr_table._columns
+                    where_parts = []
+                    where_vals = []
+                    for ci, col in enumerate(orig_cols):
+                        if col != layer.geom_col:
+                            where_parts.append(f'"{col}" = %s')
+                            where_vals.append(orig_row[ci] if ci < len(orig_row) else None)
+                    if where_parts:
+                        where_clause = " AND ".join(where_parts)
+                        sql = f'DELETE FROM {layer.qualified_name} WHERE {where_clause}'
+                        cur.execute(sql, where_vals)
+                deleted += cur.rowcount
+            self._db_conn.commit()
+            cur.close()
+            self.statusBar().showMessage(f"✅ {deleted} baris dihapus")
+            self._load_layer(layer)
+        except Exception as exc:
+            self._db_conn.rollback()
+            logger.error("Delete rows failed: %s", exc)
+            QMessageBox.critical(self, "Gagal Menghapus Baris",
+                               f"Error:\n\n{exc}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Dialogs
@@ -706,8 +1147,21 @@ class MainWindow(QMainWindow):
 
     def _export(self, format_name: str = "GeoJSON"):
         if self._current_gdf is None:
+            # Cek apakah layer aktif adalah non-spasial (tidak punya geometri)
+            if self._current_layer and not self._current_layer.geom_col:
+                QMessageBox.information(
+                    self, "Tabel Non-Spasial",
+                    "Tabel ini tidak memiliki kolom geometri (non-spasial).\n\n"
+                    "Data atribut bisa diexport sebagai CSV melalui:\n"
+                    "  • Menu Export → Export CSV\n"
+                    "  • Atau jalankan query di SQL Console, lalu export hasilnya.\n\n"
+                    "Untuk export GeoJSON/Shapefile diperlukan data spasial.")
+                # Jika format CSV, coba export dari baris di tabel atribut
+                if format_name == "CSV":
+                    self._export_non_spatial_csv()
+                return
             QMessageBox.information(self, "Info", "Belum ada data untuk diexport.\n"
-                                                   "Muat layer atau jalankan query terlebih dahulu.")
+                                                   "Muat layer terlebih dahulu.")
             return
         exp = EXPORTERS.get(format_name)
         if not exp:
@@ -725,6 +1179,29 @@ class MainWindow(QMainWindow):
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────────────────────────────────
+
+    def _export_non_spatial_csv(self):
+        """Export tabel non-spasial sebagai CSV dari data yang ada di tabel atribut."""
+        attr = self._bottom_panel.attr_table
+        if not attr._columns or not attr._rows:
+            QMessageBox.information(self, "Info", "Tidak ada data di tabel atribut.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export CSV", "hasil.csv", "CSV Files (*.csv)")
+        if not path:
+            return
+        try:
+            import csv as _csv
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                writer = _csv.writer(f)
+                writer.writerow(attr._columns)
+                writer.writerows(attr._rows)
+            QMessageBox.information(
+                self, "Export Berhasil",
+                f"✅ {len(attr._rows):,} baris diexport ke {Path(path).name}")
+            logger.info("Non-spatial CSV exported: %s (%d rows)", path, len(attr._rows))
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Gagal", str(exc))
 
     def _check_connected(self) -> bool:
         if not self._db_conn.is_connected:
@@ -929,6 +1406,12 @@ class MainWindow(QMainWindow):
             h_split=self._h_split.sizes(),
             v_split=self._v_split.sizes(),
         )
+
+        # Close all attribute table dialogs
+        for dlg in self._attr_dialogs[:]:
+            dlg.close()
+            dlg.deleteLater()
+        self._attr_dialogs.clear()
 
         # Prompt save if dirty
         if self._project.is_dirty:

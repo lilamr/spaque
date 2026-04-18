@@ -12,16 +12,22 @@ class LayerInfo:
     """
     Represents a single spatial layer (table) from PostGIS.
     Immutable after construction.
+    Supports both spatial (geometry) and non-spatial (plain) tables.
     """
     schema: str
     table_name: str
     geom_col: str
-    geom_type: str          # e.g. "POLYGON", "MULTIPOLYGON"
+    geom_type: str          # e.g. "POLYGON", "MULTIPOLYGON", or "" for non-spatial
     srid: int
     col_count: int = 0
     row_count: Optional[int] = None
 
     # ── Computed helpers ──────────────────────────────────────────────────────
+    @property
+    def is_spatial(self) -> bool:
+        """Returns True if this layer has geometry data."""
+        return bool(self.geom_col and self.geom_type)
+
     @property
     def qualified_name(self) -> str:
         return f'"{self.schema}"."{self.table_name}"'
@@ -36,7 +42,9 @@ class LayerInfo:
 
     @property
     def geom_family(self) -> str:
-        """Returns base type without MULTI prefix."""
+        """Returns base type without MULTI prefix. Returns 'TABLE' for non-spatial."""
+        if not self.is_spatial:
+            return "TABLE"
         return self.geom_type.upper().replace("MULTI", "").split("(")[0]
 
     @property
@@ -55,12 +63,17 @@ class LayerInfo:
         parts = [
             f"Schema: {self.schema}",
             f"Tabel: {self.table_name}",
-            f"Geometri: {self.geom_type}",
-            f"SRID: {self.srid}",
-            f"Kolom geometri: {self.geom_col}",
         ]
+        if self.is_spatial:
+            parts.extend([
+                f"Geometri: {self.geom_type}",
+                f"SRID: {self.srid}",
+                f"Kolom geometri: {self.geom_col}",
+            ])
+        else:
+            parts.append("Tipe: Tabel (non-spasial)")
         if self.row_count is not None:
-            parts.append(f"Jumlah fitur: {self.row_count:,}")
+            parts.append(f"Jumlah baris: {self.row_count:,}")
         return "\n".join(parts)
 
 
@@ -77,6 +90,8 @@ class LayerColumn:
 
     @property
     def is_numeric(self) -> bool:
+        if self.data_type is None:
+            return False
         from utils.helpers import is_numeric_type
         return is_numeric_type(self.data_type)
 

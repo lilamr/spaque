@@ -586,3 +586,43 @@ class SpatialJoin(BaseGeoprocess):
             f"{spec.join_type} JOIN {b} b\n"
             f"  ON {spec.spatial_predicate}(a.{ga}, ST_Transform(b.{gb}, ST_SRID(a.{ga})))"
         )
+
+
+# ── JOIN BY FIELD ─────────────────────────────────────────────────────────────
+
+class JoinByField(BaseGeoprocess):
+    """
+    Gabungkan atribut dua tabel berdasarkan nilai kolom yang sama (non-spasial).
+    Cocok untuk menggabungkan layer spasial dengan tabel atribut (CSV non-spasial).
+    """
+    name = "Join by Field"
+    category = "Gabung"
+    icon = "🔑"
+    description = "Gabung atribut berdasarkan kesamaan nilai kolom (non-spasial)"
+    requires_overlay = True
+
+    def build_sql(self, spec: GeoprocessSpec) -> str:
+        a   = self._q(spec.input_schema, spec.input_table)
+        b   = self._q(spec.overlay_schema, spec.overlay_table)
+        lf  = self._col(spec.join_left_field or "id")
+        rf  = self._col(spec.join_right_field or "id")
+        jt  = spec.join_type or "LEFT OUTER"
+        rft = (spec.join_right_field or "id").strip('"')
+        # Kolom b diambil semua KECUALI kolom join key (rf) karena sudah ada di a.
+        # Kolom lain yang namanya sama dengan kolom a akan diberi prefix 'b_'
+        # melalui teknik USING — jika kolom join key namanya sama, USING menghilangkan duplikat.
+        # Jika nama kolom kiri == kanan, pakai USING untuk auto-dedup:
+        lft = (spec.join_left_field or "id").strip('"')
+        if lft == rft:
+            return (
+                f"-- Join menggunakan kolom '{lft}' (nama sama di kedua tabel — pakai USING)\n"
+                f"SELECT * FROM {a} a\n"
+                f"{jt} JOIN {b} b USING ({self._col(lft)})"
+            )
+        else:
+            return (
+                f"-- Join kolom '{lft}' (input) = '{rft}' (join table)\n"
+                f"-- Kolom b dengan nama sama dengan a akan ada dua versi di hasil\n"
+                f"SELECT a.*, b.* FROM {a} a\n"
+                f"{jt} JOIN {b} b ON a.{lf} = b.{rf}"
+            )

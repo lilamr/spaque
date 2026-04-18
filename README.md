@@ -5,7 +5,7 @@
 [![PyQt6](https://img.shields.io/badge/PyQt6-6.6%2B-green)](https://pypi.org/project/PyQt6/)
 [![PostGIS](https://img.shields.io/badge/PostGIS-3.0%2B-orange)](https://postgis.net)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)]()
+[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen)]()
 
 Desktop GIS berbasis Python untuk **geoprocessing** dan **query spasial visual** via PostGIS.
 Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara manual.
@@ -16,7 +16,8 @@ Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara
 
 | Kategori | Operasi |
 |---|---|
-| **Import File** | SHP, GeoJSON, GPKG, KML/KMZ, TAB, GML, GPX, FGB, DXF, GDB, CSV/TXT |
+| **Import File** | SHP, GeoJSON, GPKG, KML/KMZ, TAB, GML, GPX, FGB, DXF, GDB, CSV/TXT + CSV non-spasial |
+| **Import PK** | Tiga strategi PK saat import: buat otomatis (`_gid`), pilih kolom existing, atau tanpa PK |
 | **Query Visual** | WHERE builder (AND/OR, semua operator SQL), ORDER BY, LIMIT |
 | **Pipeline Builder** | Visual Pipeline Builder — drag & drop node: Source → Query → Geoprocessing → Output |
 | **Overlay** | Buffer, Intersect, Union, Clip, Difference, Symmetric Difference |
@@ -24,6 +25,8 @@ Semua operasi dilakukan dengan klik-pilih dari menu — tanpa menulis SQL secara
 | **Kalkulasi** | Hitung Luas/Panjang/Perimeter (akurat di ellipsoid), Statistik Spasial |
 | **Seleksi Spasial** | Select by Location, Select by Distance, Nearest Neighbor (KNN) |
 | **Gabung** | Spatial Join |
+| **Edit Atribut** | Edit nilai sel inline, tambah/hapus kolom, tambah baris (non-spasial), simpan ke PostGIS |
+| **Tabel Non-Spasial** | Import, tampilkan, dan edit tabel CSV tanpa geometri — muncul di Layer Panel (ikon 📋) |
 | **Export** | GeoJSON, Shapefile, CSV |
 | **Peta** | Leaflet.js interaktif, Choropleth, multi-basemap |
 | **Project** | Save/Load sesi kerja (.spq) |
@@ -219,11 +222,12 @@ pip install -r requirements.txt --upgrade
 
 1. Klik **🔌 Koneksi** → isi kredensial PostgreSQL/PostGIS
 2. Double-klik layer di panel kiri untuk tampilkan di peta
-3. **📂 Import** → import file spasial ke PostGIS
+3. **📂 Import** → import file spasial (atau CSV non-spasial) ke PostGIS
 4. **🔍 Query Builder** → filter data visual tanpa SQL
 5. **⚙ Geoprocessing** → analisis spasial (Buffer, Clip, Intersect, dll.)
-6. **⬇ Export** → export ke GeoJSON/SHP/CSV
-7. **Ctrl+S** → simpan project ke file `.spq`
+6. **📋 Tabel Atribut** → lihat, edit, tambah/hapus kolom dan baris
+7. **⬇ Export** → export ke GeoJSON/SHP/CSV
+8. **Ctrl+S** → simpan project ke file `.spq`
 
 Lihat panduan lengkap di menu **Bantuan (F1)** atau folder `docs/`.
 
@@ -238,7 +242,11 @@ spaque/
 ├── requirements.txt
 ├── docs/
 │   ├── panduan-query-builder.md
-│   └── panduan-geoprocessing.md
+│   ├── panduan-geoprocessing.md
+│   ├── panduan-tabel-atribut.md
+│   ├── panduan-import.md
+│   ├── panduan-pipeline-builder.md
+│   └── panduan-sql-console.md
 ├── core/
 │   ├── database/          ← Koneksi & repository PostgreSQL
 │   ├── domain/            ← Entities & value objects
@@ -279,13 +287,21 @@ pytest tests/ -v
 | `libEGL.so not found` (Linux) | `sudo apt install libegl1` |
 | Error GDAL di Windows | Install wheel dari Gohlke's repository |
 | Layer Z tidak tampil di peta | Update ke versi terbaru — sudah diperbaiki |
+| Tabel non-spasial tidak bisa diedit | Tambah PK: `ALTER TABLE t ADD COLUMN _gid SERIAL PRIMARY KEY` |
+| Tombol ✏ Edit tidak muncul | Tabel tidak punya PK — lihat panduan Tabel Atribut |
+| Scroll tabel terpotong | Update ke v1.2.0 — sudah diperbaiki |
+| Tambah baris tidak tersedia | Hanya untuk tabel non-spasial dengan PK |
 
 ---
 
 ## Panduan Lengkap
 
+- [Panduan Import](docs/panduan-import.md)
+- [Panduan Tabel Atribut](docs/panduan-tabel-atribut.md)
 - [Panduan Query Builder](docs/panduan-query-builder.md)
 - [Panduan Geoprocessing](docs/panduan-geoprocessing.md)
+- [Panduan Pipeline Builder](docs/panduan-pipeline-builder.md)
+- [Panduan SQL Console](docs/panduan-sql-console.md)
 - Bantuan in-app: tekan **F1** atau menu **Bantuan**
 
 ---

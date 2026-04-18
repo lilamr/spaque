@@ -124,6 +124,9 @@ class LayerBrowser(QWidget):
         self._tree.clear()
         schemas: dict[str, QTreeWidgetItem] = {}
 
+        spatial_count = 0
+        table_count = 0
+
         for layer in layers:
             # Schema node
             if layer.schema not in schemas:
@@ -135,16 +138,28 @@ class LayerBrowser(QWidget):
                 schemas[layer.schema] = schema_item
 
             icon = GEOM_ICONS.get(layer.geom_family, "🌐")
-            child = QTreeWidgetItem([f"{icon}  {layer.table_name}"])
+            label = f"{icon}  {layer.table_name}"
+            if not layer.is_spatial:
+                label += "  (tabel)"
+            child = QTreeWidgetItem([label])
             child.setData(0, Qt.ItemDataRole.UserRole, layer)
             child.setToolTip(0, layer.tooltip())
             schemas[layer.schema].addChild(child)
 
-        count = len(layers)
-        self._footer.setText(
-            f"  {count} layer spasial ditemukan"
-            if count else "  Tidak ada layer spasial di database ini"
-        )
+            if layer.is_spatial:
+                spatial_count += 1
+            else:
+                table_count += 1
+
+        if spatial_count and table_count:
+            footer = f"  {spatial_count} layer spasial, {table_count} tabel"
+        elif spatial_count:
+            footer = f"  {spatial_count} layer spasial ditemukan"
+        elif table_count:
+            footer = f"  {table_count} tabel ditemukan"
+        else:
+            footer = "  Tidak ada layer di database ini"
+        self._footer.setText(footer)
 
     def set_connected(self, connected: bool, label: str = ""):
         self.conn_banner.set_state(connected, label)
@@ -160,9 +175,14 @@ class LayerBrowser(QWidget):
     def _on_click(self, item: QTreeWidgetItem, _col: int):
         layer: Optional[LayerInfo] = item.data(0, Qt.ItemDataRole.UserRole)
         if layer:
-            self._footer.setText(
-                f"  {layer.table_name}  ·  {layer.geom_type}  ·  SRID:{layer.srid}"
-            )
+            if layer.is_spatial:
+                self._footer.setText(
+                    f"  {layer.table_name}  ·  {layer.geom_type}  ·  SRID:{layer.srid}"
+                )
+            else:
+                self._footer.setText(
+                    f"  {layer.table_name}  ·  Tabel  ·  {layer.col_count} kolom"
+                )
             self.layer_selected.emit(layer)
 
     def _on_double_click(self, item: QTreeWidgetItem, _col: int):
@@ -184,7 +204,9 @@ class LayerBrowser(QWidget):
             "border-radius:6px;padding:4px;}"
             "QMenu::item:selected{background:#2e5bff33;border-radius:3px;}"
         )
-        act_load   = menu.addAction("🗺  Tampilkan di Peta")
+        
+        if layer.is_spatial:
+            act_load = menu.addAction("🗺  Tampilkan di Peta")
         act_attr   = menu.addAction("📋  Lihat Atribut")
         menu.addSeparator()
         act_stat   = menu.addAction("📊  Statistik Layer")
@@ -193,7 +215,7 @@ class LayerBrowser(QWidget):
         act_delete.setToolTip("DROP TABLE permanen dari PostGIS")
 
         action = menu.exec(self._tree.viewport().mapToGlobal(pos))
-        if action == act_load:
+        if layer.is_spatial and action == act_load:
             self.layer_activated.emit(layer)
         elif action == act_attr:
             self.layer_attributes.emit(layer)

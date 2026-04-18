@@ -241,25 +241,72 @@ class GeoprocessDialog(QDialog):
         self.w_k.setValue(1)
         self.w_k.setFixedHeight(32)
 
-        # Connect input layer change to update field combos
-        self.w_input.currentIndexChanged.connect(self._refresh_field_combos)
+        # Join by Field: kolom kunci dari masing-masing tabel
+        self.w_left_field  = combo(["(pilih kolom)"])
+        self.w_right_field = combo(["(pilih kolom)"])
 
-    def _refresh_field_combos(self):
+        # Connect input/overlay layer change to update field combos
+        self.w_input.currentIndexChanged.connect(self._refresh_field_combos)
+        self.w_overlay.currentIndexChanged.connect(self._on_overlay_changed)
+
+    def _on_overlay_changed(self):
+        """Dipanggil saat pilihan overlay berubah — refresh kolom kunci kanan."""
+        self._refresh_right_field()
+        self._refresh_field_combos()
+        self._update_preview()
+
+    def _refresh_right_field(self):
+        """Reload daftar kolom untuk w_right_field dari overlay yang dipilih saat ini."""
+        ov_idx = self.w_overlay.currentIndex()
+        if ov_idx < 0 or ov_idx >= len(self._layers):
+            return
+        try:
+            ov_cols = self._get_cols(self._layers[ov_idx])
+            ov_non_geom = [c.name for c in ov_cols if not c.is_geometry]
+        except Exception:
+            ov_non_geom = []
+        cur = self.w_right_field.currentText()
+        self.w_right_field.blockSignals(True)
+        self.w_right_field.clear()
+        self.w_right_field.addItems(["(pilih kolom)"] + ov_non_geom)
+        if cur in ov_non_geom:
+            self.w_right_field.setCurrentText(cur)
+        self.w_right_field.blockSignals(False)
+
+    def _refresh_field_combos(self, force_reload: bool = False):
         idx = self.w_input.currentIndex()
         if idx < 0 or idx >= len(self._layers):
             return
         layer = self._layers[idx]
         try:
+            # force_reload=True bypasses cache — dipakai setelah add/delete column
+            if force_reload and hasattr(self._get_cols, '__self__'):
+                repo = self._get_cols.__self__._repo
+                repo.invalidate_cache()
             cols = self._get_cols(layer)
             non_geom = [c.name for c in cols if not c.is_geometry]
             numeric  = [c.name for c in cols if c.is_numeric]
         except Exception:
             non_geom, numeric = [], []
 
+        # Overlay/join layer kolom — selalu reload dari layer yang dipilih
+        ov_idx = self.w_overlay.currentIndex()
+        ov_non_geom = []
+        if 0 <= ov_idx < len(self._layers):
+            try:
+                ov_layer = self._layers[ov_idx]
+                ov_cols  = self._get_cols(ov_layer)
+                # Untuk tabel non-spasial, semua kolom non-geom termasuk
+                ov_non_geom = [c.name for c in ov_cols if not c.is_geometry]
+            except Exception as e:
+                ov_non_geom = []
+
         for cb, base, items in [
             (self.w_dissolve_field, ["(gabung semua)"], non_geom),
             (self.w_value_col,      ["(pilih kolom numerik)"], numeric),
             (self.w_group_col,      ["(tidak ada)"], non_geom),
+            (self.w_left_field,     ["(pilih kolom)"], non_geom),
+            (self.w_right_field,    ["(pilih kolom)"], ov_non_geom),
         ]:
             cb.blockSignals(True)
             cb.clear()
@@ -323,6 +370,14 @@ class GeoprocessDialog(QDialog):
                 row("Jarak (unit CRS):", self.w_distance)
             case "Nearest Neighbor":
                 row("K tetangga:", self.w_k)
+            case "Join by Field":
+                # Tampilkan overlay picker terlebih dahulu
+                row("Layer Join:", self.w_overlay)
+                row("Kolom kunci Input:", self.w_left_field)
+                row("Kolom kunci Join:", self.w_right_field)
+                row("Tipe join:", self.w_join_type)
+                # Refresh setelah widgets ada di form
+                self._refresh_field_combos()
 
         self._update_preview()
 
@@ -370,6 +425,8 @@ class GeoprocessDialog(QDialog):
             area_unit=self.w_area_unit.currentText(),
             dissolve=self.w_dissolve.isChecked(),
             preserve_topology=self.w_preserve.isChecked(),
+            join_left_field=field(self.w_left_field),
+            join_right_field=field(self.w_right_field),
         )
 
     def _update_preview(self):

@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import geopandas as gpd
 
 from core.database.connection import DatabaseConnection
-from core.importers.base import SpatialImporter, ImportSpec, ImportResult
+from core.importers.base import SpatialImporter, ImportSpec, ImportResult, NonSpatialImportResult
 from utils.logger import get_logger
 
 logger = get_logger("spaque.services.import")
@@ -57,3 +57,11 @@ class ImportService:
             return cur.fetchone() is not None
         finally:
             cur.close()
+
+    def import_non_spatial(self, spec: "ImportSpec") -> "NonSpatialImportResult":
+        """Import CSV tanpa geometri ke PostgreSQL biasa."""
+        logger.info(
+            "Non-spatial import: %s → %s.%s",
+            spec.file_path.name, spec.target_schema, spec.resolved_table,
+        )
+        return self._engine.run_non_spatial(spec)

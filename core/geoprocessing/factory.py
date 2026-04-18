@@ -13,7 +13,7 @@ from core.geoprocessing.buffer import (
     Dissolve, Reproject, Voronoi, Delaunay,
     CalculateArea, CalculateLength, CalculatePerimeter, SpatialStats,
     SelectByLocation, SelectByDistance, NearestNeighbor,
-    SpatialJoin,
+    SpatialJoin, JoinByField,
 )
 
 REGISTRY: Dict[str, List[Type[BaseGeoprocess]]] = {
@@ -22,7 +22,7 @@ REGISTRY: Dict[str, List[Type[BaseGeoprocess]]] = {
                        Simplify, Dissolve, Reproject, Voronoi, Delaunay],
     "Kalkulasi":      [CalculateArea, CalculateLength, CalculatePerimeter, SpatialStats],
     "Seleksi Spasial":[SelectByLocation, SelectByDistance, NearestNeighbor],
-    "Gabung":         [SpatialJoin],
+    "Gabung":         [SpatialJoin, JoinByField],
 }
 
 # Flat name → instance map for quick lookup

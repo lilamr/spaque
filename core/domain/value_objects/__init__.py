@@ -109,6 +109,8 @@ class GeoprocessSpec:
     dissolve_field: Optional[str] = None
     value_col: Optional[str] = None
     group_col: Optional[str] = None
+    join_left_field: Optional[str] = None   # kolom kunci dari layer input (Join by Field)
+    join_right_field: Optional[str] = None  # kolom kunci dari layer/tabel join
     k_neighbors: int = 1
     spatial_predicate: str = "ST_Intersects"
     join_type: str = "INNER"
